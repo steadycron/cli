@@ -102,6 +102,56 @@ public sealed class SteadyCronClient
     public Task<CronPreviewResponse> PreviewCronAsync(CronPreviewRequest request, CancellationToken ct = default) =>
         SendJsonAsync<CronPreviewResponse>(HttpMethod.Post, "api/cron/preview", request, ct);
 
+    // ── Tags ──────────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<TagResponse>> ListTagsAsync(CancellationToken ct = default) =>
+        await GetAsync<List<TagResponse>>("api/tags", ct);
+
+    public Task<TagResponse> CreateTagAsync(CreateTagRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<TagResponse>(HttpMethod.Post, "api/tags", request, ct);
+
+    public Task DeleteTagAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"api/tags/{id}", content: null, ct);
+
+    // ── Template variables ──────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<TemplateVariableResponse>> ListVariablesAsync(CancellationToken ct = default) =>
+        await GetAsync<List<TemplateVariableResponse>>("api/variables", ct);
+
+    public Task<TemplateVariableResponse> CreateVariableAsync(CreateTemplateVariableRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<TemplateVariableResponse>(HttpMethod.Post, "api/variables", request, ct);
+
+    public Task<TemplateVariableResponse> UpdateVariableAsync(Guid id, UpdateTemplateVariableRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<TemplateVariableResponse>(HttpMethod.Patch, $"api/variables/{id}", request, ct);
+
+    public Task DeleteVariableAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"api/variables/{id}", content: null, ct);
+
+    // ── Alert channels ──────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<AlertChannelResponse>> ListChannelsAsync(CancellationToken ct = default) =>
+        await GetAsync<List<AlertChannelResponse>>("api/alert-channels", ct);
+
+    public Task<AlertChannelResponse> CreateChannelAsync(CreateAlertChannelRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<AlertChannelResponse>(HttpMethod.Post, "api/alert-channels", request, ct);
+
+    public Task TestChannelAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"api/alert-channels/{id}/test", content: null, ct);
+
+    public Task DeleteChannelAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"api/alert-channels/{id}", content: null, ct);
+
+    // ── Alert rules ─────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<AlertRuleResponse>> ListRulesAsync(Guid jobId, CancellationToken ct = default) =>
+        await GetAsync<List<AlertRuleResponse>>($"api/jobs/{jobId}/alert-rules", ct);
+
+    public Task<AlertRuleResponse> CreateRuleAsync(Guid jobId, CreateAlertRuleRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<AlertRuleResponse>(HttpMethod.Post, $"api/jobs/{jobId}/alert-rules", request, ct);
+
+    public Task DeleteRuleAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"api/alert-rules/{id}", content: null, ct);
+
     // ── transport helpers ──────────────────────────────────────────────────────────
 
     private async Task<T> GetAsync<T>(string path, CancellationToken ct)

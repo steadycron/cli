@@ -148,8 +148,45 @@ steadycron jobs resume weekly-digest-email
 steadycron jobs run warm-cdn-cache         # trigger now (HTTP jobs)
 steadycron jobs delete old-job --yes
 
+# Create a single job from flags (same validation/defaults as the manifest)
+steadycron jobs create --name warm-cache --url https://api.myapp.com/warm \
+  --method GET --interval 900 --skip-if-running
+steadycron jobs create --name nightly-backup --kind heartbeat \
+  --schedule "0 2 * * *" --grace 1800
+
 steadycron cron preview "*/15 9-17 * * 1-5" --timezone Europe/Berlin
 ```
+
+## Tags, variables, alert channels & rules
+
+```bash
+# Tags
+steadycron tags list
+steadycron tags create env prod --color green
+steadycron tags delete env:prod
+
+# Template variables ({{name}} placeholders used in HTTP job URLs/headers/body)
+steadycron vars list
+steadycron vars set digest_token "sk_live_…"
+steadycron vars delete digest_token
+
+# Alert channels
+steadycron channels list
+steadycron channels create --name "Ops email"   --kind email    --to ops@example.com
+steadycron channels create --name "Eng Slack"    --kind slack    --webhook-url https://hooks.slack.com/services/…
+steadycron channels create --name "Deploy hook"  --kind webhook  --url https://example.com/hook --header "Authorization: Bearer …"
+steadycron channels test "Ops email"
+steadycron channels delete "Ops email"
+
+# Per-job alert rules
+steadycron rules list nightly-db-backup
+steadycron rules add nightly-db-backup --channel "Ops email" --trigger missed_heartbeat --severity p1
+steadycron rules add warm-cdn-cache --channel "Eng Slack" --trigger slow_run --factor 3 --min-samples 5
+steadycron rules delete <rule-id>
+```
+
+Triggers: `failure`, `n_consecutive`, `missed_heartbeat`, `recovery`, `slow_run`, `size_anomaly`.
+Channel kinds: `email`, `slack`, `discord`, `webhook`, `telegram`.
 
 Add `--json` to any command for machine-readable output (ideal for scripting).
 

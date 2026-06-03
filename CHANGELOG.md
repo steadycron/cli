@@ -6,6 +6,18 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-03
+
+### Added
+- `steadycron jobs create` — create a single job from flags (same validation and defaults as the
+  manifest).
+- `steadycron tags` — `list`, `create`, `delete`.
+- `steadycron vars` — `list`, `set` (upsert), `delete` (account template variables).
+- `steadycron channels` — `list`, `create`, `test`, `delete` (email/slack/discord/webhook/telegram).
+- `steadycron rules` — `list`, `add`, `delete` (per-job alert rules).
+
+## [1.0.0] - 2026-06-03
+
 ### Added
 - `steadycron sync [manifest]` — declarative reconciliation of jobs from a YAML manifest, with
   `--dry-run` / `--plan`, `--prune`, and `--yes`.
@@ -17,3 +29,7 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 - Distribution as a .NET global tool (`dotnet tool install -g steadycron`) and as self-contained
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
+
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/steadycron/cli/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/steadycron/cli/releases/tag/v1.0.0
