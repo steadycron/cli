@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Source for icon.png — mirrors the landing page favicon (steadycron/web/public/favicon.svg). -->
+  <!-- Dark background -->
+  <rect width="32" height="32" rx="7" fill="#090d12"/>
+  <!-- Outer pulse ring -->
+  <circle cx="16" cy="16" r="11" stroke="#22c55e" stroke-width="1.5" opacity="0.35"/>
+  <!-- Inner pulse ring -->
+  <circle cx="16" cy="16" r="7" stroke="#22c55e" stroke-width="1.5" opacity="0.6"/>
+  <!-- Center dot — the heartbeat -->
+  <circle cx="16" cy="16" r="3.5" fill="#22c55e"/>
+</svg>
