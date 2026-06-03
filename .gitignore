@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+artifacts/
+publish/
+*.user
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+*.suo
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets / config
+.env
+*.local.json

@@ -1,0 +1,41 @@
+# SteadyCron manifest — declare jobs as code and reconcile with `steadycron sync`.
+# Docs: https://steadycron.com/docs/infrastructure-as-code
+version: 1
+
+jobs:
+  # ── HTTP job: SteadyCron calls your endpoint on a schedule ──────────────────
+  - name: weekly-digest-email
+    kind: http
+    method: POST
+    url: https://api.myapp.com/jobs/digest
+    schedule: "0 9 * * 1"        # Mondays at 09:00
+    timezone: Europe/Berlin
+    timeout: 120                  # seconds
+    retries: 3
+    headers:
+      Authorization: "Bearer {{digest_token}}"   # {{…}} = account template variable
+      Content-Type: application/json
+    body: '{"segment":"weekly"}'
+
+  - name: warm-cdn-cache
+    kind: http
+    method: GET
+    url: https://api.myapp.com/internal/warm-cache
+    interval: 900                 # every 15 minutes
+    skip_if_running: true
+    retry_on_status: [500, 502, 503, 504]
+    misfire_policy: fire_once_now
+
+  # ── Heartbeat: you ping SteadyCron; it alerts if a ping is missed ───────────
+  - name: nightly-db-backup
+    kind: heartbeat
+    schedule: "0 2 * * *"         # expected nightly at 02:00
+    timezone: Europe/Berlin
+    grace: 1800                   # 30 min grace before "missed"
+
+  - name: hourly-etl
+    kind: heartbeat
+    interval: 3600
+    grace: 300
+    stuck_run_detection: true
+    max_run_duration: 1200

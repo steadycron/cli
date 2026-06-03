@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Shared package metadata. Versioning is driven from the build/CI (see -p:Version=…). -->
+  <PropertyGroup>
+    <Authors>SteadyCron</Authors>
+    <Company>SteadyCron</Company>
+    <Product>SteadyCron CLI</Product>
+    <Copyright>Copyright (c) 2026 SteadyCron</Copyright>
+    <PackageProjectUrl>https://steadycron.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/steadycron/cli</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>

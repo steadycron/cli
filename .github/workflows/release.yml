@@ -1,0 +1,108 @@
+name: Release
+
+# Tag a release to publish, e.g.:  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write   # create the GitHub Release and upload assets
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet test --configuration Release
+
+  pack-and-push:
+    name: Pack & push NuGet tool
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Resolve version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Pack global tool
+        run: dotnet pack src/SteadyCron.Cli/SteadyCron.Cli.csproj -c Release -p:Version=$VERSION -o artifacts
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Upload nupkg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
+
+  binaries:
+    name: Build self-contained binaries
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [linux-x64, linux-arm64, win-x64, win-arm64, osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Resolve version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Single-file self-contained binaries cross-publish from a single host (these are not NativeAOT).
+      - name: Publish ${{ matrix.rid }}
+        run: >
+          dotnet publish src/SteadyCron.Cli/SteadyCron.Cli.csproj
+          -c Release -r ${{ matrix.rid }} --self-contained true
+          -p:Version=$VERSION
+          -o publish/${{ matrix.rid }}
+
+      - name: Stage named binary
+        run: |
+          mkdir -p dist
+          if [ -f "publish/${{ matrix.rid }}/steadycron.exe" ]; then
+            cp "publish/${{ matrix.rid }}/steadycron.exe" "dist/steadycron-${{ matrix.rid }}.exe"
+          else
+            cp "publish/${{ matrix.rid }}/steadycron" "dist/steadycron-${{ matrix.rid }}"
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.rid }}
+          path: dist/*
+
+  release:
+    name: Publish GitHub Release
+    needs: [pack-and-push, binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release
+          find incoming -type f \( -name 'steadycron-*' -o -name '*.nupkg' \) -exec cp {} release/ \;
+          ls -l release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

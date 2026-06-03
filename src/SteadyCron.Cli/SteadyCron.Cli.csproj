@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SteadyCron.Cli</RootNamespace>
+    <AssemblyName>steadycron</AssemblyName>
+    <RollForward>Major</RollForward>
+
+    <!-- ── Pack as a .NET global tool ──────────────────────────────────────── -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>steadycron</ToolCommandName>
+    <PackageId>steadycron</PackageId>
+    <Description>Infrastructure-as-code CLI for SteadyCron — declare your scheduled HTTP jobs and heartbeat monitors in a YAML manifest and reconcile them with `steadycron sync`, or manage jobs imperatively.</Description>
+    <PackageTags>cron;scheduler;monitoring;heartbeat;cli;dotnet-tool;steadycron;infrastructure-as-code</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>See CHANGELOG.md.</PackageReleaseNotes>
+
+    <!-- Default version; overridden by CI via -p:Version=… -->
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+
+    <!-- ── Self-contained single-file publish (used by the release workflow) ──
+         Spectre.Console.Cli resolves command types via reflection, so we ship a
+         trim-free self-contained single-file binary rather than NativeAOT. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Files referenced by package metadata must be packed into the nupkg root. -->
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
