@@ -16,3 +16,4 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 - Global `--json`, `--quiet`, `--no-color`, `--api-key`, `--api-url`.
 - Distribution as a .NET global tool (`dotnet tool install -g steadycron`) and as self-contained
   single-file binaries.
+- MIT license, complete NuGet metadata, Source Link, and reproducible builds.

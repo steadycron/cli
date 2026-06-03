@@ -5,29 +5,46 @@
     <RootNamespace>SteadyCron.Cli</RootNamespace>
     <AssemblyName>steadycron</AssemblyName>
     <RollForward>Major</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
 
-    <!-- ── Pack as a .NET global tool ──────────────────────────────────────── -->
+  <!-- ── Pack as a .NET global tool ──────────────────────────────────────────── -->
+  <PropertyGroup>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>steadycron</ToolCommandName>
     <PackageId>steadycron</PackageId>
-    <Description>Infrastructure-as-code CLI for SteadyCron — declare your scheduled HTTP jobs and heartbeat monitors in a YAML manifest and reconcile them with `steadycron sync`, or manage jobs imperatively.</Description>
-    <PackageTags>cron;scheduler;monitoring;heartbeat;cli;dotnet-tool;steadycron;infrastructure-as-code</PackageTags>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <Title>SteadyCron CLI</Title>
+    <Description>Infrastructure-as-code CLI for SteadyCron — declare your scheduled HTTP jobs and heartbeat monitors in a YAML manifest and reconcile them with `steadycron sync`, or manage jobs imperatively. Authenticates with a SteadyCron API key.</Description>
+    <PackageTags>cron;scheduler;monitoring;heartbeat;cli;dotnet-tool;steadycron;infrastructure-as-code;devops</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>See the changelog: https://github.com/steadycron/cli/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
-    <!-- Default version; overridden by CI via -p:Version=… -->
+    <!-- Default version for local builds; CI overrides via -p:Version=… from the git tag. -->
     <Version Condition="'$(Version)' == ''">0.1.0</Version>
+  </PropertyGroup>
 
-    <!-- ── Self-contained single-file publish (used by the release workflow) ──
-         Spectre.Console.Cli resolves command types via reflection, so we ship a
-         trim-free self-contained single-file binary rather than NativeAOT. -->
+  <!-- ── Optional package icon (auto-included once icon.png is added at the repo root) ── -->
+  <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/../../icon.png')">
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <!-- ── Reproducible build + Source Link (source-step into the package) ──────── -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+
+  <!-- ── Self-contained single-file publish (release binaries only; needs a RID) ──
+       Spectre.Console.Cli resolves command types via reflection, so we ship a
+       trim-free self-contained single-file binary rather than NativeAOT. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,12 +53,14 @@
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Files referenced by package metadata must be packed into the nupkg root. -->
     <None Include="../../README.md" Pack="true" PackagePath="\" />
     <None Include="../../LICENSE" Pack="true" PackagePath="\" />
+    <None Include="../../icon.png" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)/../../icon.png')" />
   </ItemGroup>
 
 </Project>

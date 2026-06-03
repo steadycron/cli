@@ -86,7 +86,7 @@ jobs:
     grace: 1800
 ```
 
-See [`examples/jobs.yaml`](examples/jobs.yaml) for the full field set.
+See [`examples/jobs.yaml`](https://github.com/steadycron/cli/blob/main/examples/jobs.yaml) for the full field set.
 
 ### Manifest fields
 
@@ -179,4 +179,4 @@ the dashboard; see the [API documentation](https://steadycron.com/docs/api-authe
 
 ## License
 
-Proprietary — see [LICENSE](LICENSE).
+[MIT](https://github.com/steadycron/cli/blob/main/LICENSE) © SteadyCron.
