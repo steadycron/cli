@@ -5,10 +5,12 @@ using SteadyCron.Cli;
 using SteadyCron.Cli.Commands.Channels;
 using SteadyCron.Cli.Commands.Config;
 using SteadyCron.Cli.Commands.Cron;
+using SteadyCron.Cli.Commands.Export;
 using SteadyCron.Cli.Commands.Jobs;
 using SteadyCron.Cli.Commands.Rules;
 using SteadyCron.Cli.Commands.Sync;
 using SteadyCron.Cli.Commands.Tags;
+using SteadyCron.Cli.Commands.Validate;
 using SteadyCron.Cli.Commands.Variables;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
@@ -26,6 +28,7 @@ services.AddSingleton<CancellationProvider>();
 services.AddSingleton<ConfigResolver>();
 services.AddSingleton<SteadyCronClientFactory>();
 services.AddSingleton<ManifestLoader>();
+services.AddSingleton<ManifestValidator>();
 services.AddSingleton<JobMapper>();
 services.AddSingleton<SyncPlanner>();
 
@@ -36,11 +39,30 @@ app.Configure(config =>
     config.SetApplicationName("steadycron");
     config.SetApplicationVersion(CliVersion.Value);
 
+    config.AddCommand<ValidateCommand>("validate")
+        .WithDescription("Validate a manifest locally (schema + cross-references, no API calls).")
+        .WithExample("validate", "steadycron.yaml")
+        .WithExample("validate", "./manifests/");
+
     config.AddCommand<SyncCommand>("sync")
         .WithDescription("Reconcile your account with a YAML manifest (infrastructure-as-code).")
         .WithExample("sync", "jobs.yaml")
         .WithExample("sync", "jobs.yaml", "--dry-run")
         .WithExample("sync", "jobs.yaml", "--prune", "--yes");
+
+    config.AddCommand<PlanCommand>("plan")
+        .WithDescription("Preview what sync would change (alias for sync --dry-run).")
+        .WithExample("plan", "./manifests/", "--namespace", "prod");
+
+    config.AddCommand<ApplyCommand>("apply")
+        .WithDescription("Apply a manifest without confirmation prompt (alias for sync --yes).")
+        .WithExample("apply", "./manifests/", "--namespace", "prod", "--prune");
+
+    config.AddCommand<ExportCommand>("export")
+        .WithDescription("Export your account (or a subset) as a v2 manifest.")
+        .WithExample("export", "-o", "steadycron.yaml")
+        .WithExample("export", "--scope", "jobs")
+        .WithExample("export", "--scope", "job", "weekly-digest-email");
 
     config.AddBranch("jobs", jobs =>
     {

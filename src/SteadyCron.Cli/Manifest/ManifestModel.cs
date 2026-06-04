@@ -1,21 +1,34 @@
 namespace SteadyCron.Cli.Manifest;
 
 /// <summary>
-/// The friendly YAML manifest shape documented on the marketing site
-/// (<c>name</c>/<c>kind</c>/<c>schedule</c>/<c>url</c>/…). Properties are nullable so the mapper can
-/// distinguish "omitted" from "explicitly set". YAML keys are snake_case (e.g. <c>retry_on_status</c>).
+/// The YAML manifest shape. v2 adds <c>namespace</c>, <c>channels</c>, <c>tags</c>,
+/// <c>variables</c>, <c>shaping</c>, and <c>id</c>/<c>rules</c>/<c>tags</c> on jobs.
+/// v1 (jobs-only, name-keyed, no namespace) is still accepted with a deprecation warning.
 /// </summary>
 public sealed class ManifestFile
 {
-    /// <summary>Optional manifest schema version. Currently informational.</summary>
+    /// <summary>1 (legacy) or 2 (current). Omitting version defaults to 2.</summary>
     public int? Version { get; set; }
 
+    /// <summary>Account namespace. Required by <c>--prune</c> and cross-file merges.</summary>
+    public string? Namespace { get; set; }
+
     public List<ManifestJob>? Jobs { get; set; }
+
+    // ── v2-only top-level resources ──────────────────────────────────────────────
+
+    public List<ManifestChannel>? Channels { get; set; }
+    public List<ManifestTag>? Tags { get; set; }
+    public List<ManifestVariable>? Variables { get; set; }
+    public ManifestShaping? Shaping { get; set; }
 }
 
 /// <summary>A single job declared in the manifest.</summary>
 public sealed class ManifestJob
 {
+    /// <summary>Stable reconciliation key (v2). When absent, <c>name</c> is the key (v1 behavior).</summary>
+    public string? Id { get; set; }
+
     public string? Name { get; set; }
 
     /// <summary><c>http</c> (default) or <c>heartbeat</c>.</summary>
@@ -54,4 +67,56 @@ public sealed class ManifestJob
     public int? Grace { get; set; }
     public bool? StuckRunDetection { get; set; }
     public int? MaxRunDuration { get; set; }
+
+    // ── v2-only per-job fields ───────────────────────────────────────────────────
+    /// <summary>Tag references as <c>"key:value"</c> strings. Must resolve to declared tags.</summary>
+    public List<string>? Tags { get; set; }
+
+    /// <summary>Alert rules attached to this job.</summary>
+    public List<ManifestRule>? Rules { get; set; }
+}
+
+/// <summary>An alert channel declared at the manifest level (v2).</summary>
+public sealed class ManifestChannel
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Kind { get; set; }
+    public Dictionary<string, string>? Config { get; set; }
+}
+
+/// <summary>A tag declared at the manifest level (v2).</summary>
+public sealed class ManifestTag
+{
+    public string? Id { get; set; }
+    public string? Key { get; set; }
+    public string? Value { get; set; }
+    public string? Color { get; set; }
+}
+
+/// <summary>A template variable declared at the manifest level (v2).</summary>
+public sealed class ManifestVariable
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    /// <summary>Can use <c>${ENV_VAR}</c> interpolation.</summary>
+    public string? Value { get; set; }
+}
+
+/// <summary>An alert rule attached to a job (v2).</summary>
+public sealed class ManifestRule
+{
+    /// <summary>Channel <c>id</c> or <c>name</c> reference.</summary>
+    public string? Channel { get; set; }
+    public string? Trigger { get; set; }
+    public string? Severity { get; set; }
+    public Dictionary<string, object>? Params { get; set; }
+    public int? DedupWindowSeconds { get; set; }
+}
+
+/// <summary>Account-level shaping / rate-limit hints (v2).</summary>
+public sealed class ManifestShaping
+{
+    public int? MaxConcurrentJobs { get; set; }
+    public int? MaxJobsPerMinute { get; set; }
 }

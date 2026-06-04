@@ -97,6 +97,46 @@ public sealed class SteadyCronClient
         Guid id, int page = 1, int pageSize = 50, CancellationToken ct = default) =>
         GetAsync<ExecutionListResponse>($"api/jobs/{id}/executions?page={page}&pageSize={pageSize}", ct);
 
+    // ── Reconcile ─────────────────────────────────────────────────────────────────
+
+    public Task<ReconcileResponse> ReconcileAsync(ReconcileRequest request, CancellationToken ct = default) =>
+        SendJsonAsync<ReconcileResponse>(HttpMethod.Post, "api/reconcile", request, ct);
+
+    // ── Export ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Exports the entire account as a v2 manifest. Returns the raw YAML/JSON text
+    /// exactly as the server produces it.
+    /// </summary>
+    public Task<string> ExportAccountAsync(string? format = null, string? ns = null, CancellationToken ct = default)
+    {
+        var query = "api/export";
+        var sep = '?';
+        if (format is not null) { query += $"{sep}format={Uri.EscapeDataString(format)}"; sep = '&'; }
+        if (ns is not null) { query += $"{sep}namespace={Uri.EscapeDataString(ns)}"; }
+        return GetStringAsync(query, ct);
+    }
+
+    /// <summary>Exports all jobs as a v2 manifest.</summary>
+    public Task<string> ExportJobsAsync(string? format = null, string? ns = null, CancellationToken ct = default)
+    {
+        var query = "api/export/jobs";
+        var sep = '?';
+        if (format is not null) { query += $"{sep}format={Uri.EscapeDataString(format)}"; sep = '&'; }
+        if (ns is not null) { query += $"{sep}namespace={Uri.EscapeDataString(ns)}"; }
+        return GetStringAsync(query, ct);
+    }
+
+    /// <summary>Exports a single job by id as a v2 manifest.</summary>
+    public Task<string> ExportJobAsync(Guid id, string? format = null, string? ns = null, CancellationToken ct = default)
+    {
+        var query = $"api/jobs/{id}/export";
+        var sep = '?';
+        if (format is not null) { query += $"{sep}format={Uri.EscapeDataString(format)}"; sep = '&'; }
+        if (ns is not null) { query += $"{sep}namespace={Uri.EscapeDataString(ns)}"; }
+        return GetStringAsync(query, ct);
+    }
+
     // ── Cron ──────────────────────────────────────────────────────────────────────
 
     public Task<CronPreviewResponse> PreviewCronAsync(CronPreviewRequest request, CancellationToken ct = default) =>
@@ -153,6 +193,13 @@ public sealed class SteadyCronClient
         SendAsync(HttpMethod.Delete, $"api/alert-rules/{id}", content: null, ct);
 
     // ── transport helpers ──────────────────────────────────────────────────────────
+
+    private async Task<string> GetStringAsync(string path, CancellationToken ct)
+    {
+        using var response = await _http.GetAsync(path, ct);
+        await EnsureSuccessAsync(response, HttpMethod.Get, path, ct);
+        return await response.Content.ReadAsStringAsync(ct);
+    }
 
     private async Task<T> GetAsync<T>(string path, CancellationToken ct)
     {

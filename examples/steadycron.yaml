@@ -1,0 +1,87 @@
+# SteadyCron v2 manifest — declare your whole account as code.
+# Sync with `steadycron sync steadycron.yaml` or `steadycron apply steadycron.yaml --namespace prod`.
+# Docs: https://steadycron.com/docs/infrastructure-as-code
+version: 2
+namespace: prod   # stamp all resources; required for --prune
+
+# ── Alert channels ────────────────────────────────────────────────────────────────
+channels:
+  - id: slack-oncall
+    name: Slack #oncall
+    kind: slack
+    config:
+      webhook_url: ${SLACK_WEBHOOK_URL}   # ${VAR} = CLI env-var substitution (resolved before sending)
+
+# ── Tags (label jobs for filtering / alert grouping) ──────────────────────────────
+tags:
+  - id: env-prod
+    key: env
+    value: prod
+  - id: team-backend
+    key: team
+    value: backend
+
+# ── Account template variables ({{name}} is substituted server-side in HTTP fields) ──
+# Note: ${ENV} is a CLI-load-time substitution; {{template_var}} is a server-side substitution.
+# They are distinct — document both where relevant.
+variables:
+  - id: digest-token
+    name: digest_token
+    value: ${DIGEST_TOKEN}   # set DIGEST_TOKEN in CI; never commit the actual value
+
+# ── Jobs ──────────────────────────────────────────────────────────────────────────
+jobs:
+  # ── HTTP job: SteadyCron calls your endpoint on a schedule ──────────────────────
+  - id: weekly-digest
+    name: weekly-digest-email
+    kind: http
+    method: POST
+    url: ${API_BASE_URL}/jobs/digest
+    schedule: "0 9 * * 1"       # Mondays at 09:00
+    timezone: Europe/Berlin
+    timeout: 120                 # seconds
+    retries: 3
+    headers:
+      Authorization: "Bearer {{digest_token}}"   # {{…}} = account template variable (server-side)
+      Content-Type: application/json
+    body: '{"segment":"weekly"}'
+    tags: ["env:prod", "team:backend"]
+    rules:
+      - channel: slack-oncall
+        trigger: on_failure
+        severity: p1
+      - channel: slack-oncall
+        trigger: on_recovery
+
+  - id: warm-cdn-cache
+    name: warm-cdn-cache
+    kind: http
+    method: GET
+    url: ${API_BASE_URL}/internal/warm-cache
+    interval: 900                # every 15 minutes
+    skip_if_running: true
+    retry_on_status: [500, 502, 503, 504]
+    misfire_policy: fire_once_now
+    tags: ["env:prod"]
+
+  # ── Heartbeat: you ping SteadyCron; it alerts when a ping is missed ─────────────
+  - id: nightly-db-backup
+    name: nightly-db-backup
+    kind: heartbeat
+    schedule: "0 2 * * *"        # expected nightly at 02:00
+    timezone: Europe/Berlin
+    grace: 1800                  # 30 min grace before "missed"
+    tags: ["env:prod", "team:backend"]
+    rules:
+      - channel: slack-oncall
+        trigger: on_missed_heartbeat
+        severity: p1
+
+  - id: hourly-etl
+    name: hourly-etl
+    kind: heartbeat
+    interval: 3600
+    grace: 300
+    stuck_run_detection: true
+    max_run_duration: 1200
+    tags: ["env:prod"]
