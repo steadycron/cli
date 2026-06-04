@@ -6,6 +6,16 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-04
+
+### Fixed
+- `sync` / `plan` / `apply` always reported an empty plan (`0 to create, 0 to update`) and never
+  created or updated resources. The CLI deserialized the `/api/reconcile` response into
+  non-existent `creates`/`updates`/`deletes` arrays; the server's actual `summary` + action-keyed
+  `changes` payload was silently dropped. The response model now matches the documented contract,
+  so plans, applies, and `--prune` work. Added a JSON-contract regression test that locks the
+  reconcile response shape.
+
 ## [1.2.0] - 2026-06-04
 
 ### Added

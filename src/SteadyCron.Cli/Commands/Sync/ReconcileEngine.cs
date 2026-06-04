@@ -95,11 +95,7 @@ public sealed class ReconcileEngine
         }
 
         // Nothing to do
-        var hasWork = planResponse.Creates.Count > 0 ||
-                      planResponse.Updates.Count > 0 ||
-                      planResponse.Deletes.Count > 0;
-
-        if (!hasWork)
+        if (!planResponse.HasWork)
         {
             output.Success("\nAlready in sync — nothing to do.");
             return ExitCodes.Ok;
@@ -170,11 +166,11 @@ public sealed class ReconcileEngine
     {
         var parts = new List<string>
         {
-            $"[green]{result.Creates.Count} created[/]",
-            $"[yellow]{result.Updates.Count} updated[/]",
+            $"[green]{result.Summary.Create} created[/]",
+            $"[yellow]{result.Summary.Update} updated[/]",
         };
 
-        if (result.Deletes.Count > 0) { parts.Add($"[red]{result.Deletes.Count} deleted[/]"); }
+        if (result.Summary.Delete > 0) { parts.Add($"[red]{result.Summary.Delete} deleted[/]"); }
 
         output.Markup($"\n[bold]Done:[/] {string.Join(", ", parts)}");
 
@@ -197,8 +193,7 @@ public sealed class ReconcileEngine
     {
         if (!detailedExitCode) { return ExitCodes.Ok; }
 
-        var hasDrift = plan.Creates.Count > 0 || plan.Updates.Count > 0 || plan.Deletes.Count > 0;
-        return hasDrift ? ExitCodes.ManifestError : ExitCodes.Ok;
+        return plan.HasWork ? ExitCodes.ManifestError : ExitCodes.Ok;
     }
 
     private static bool IsInteractive() =>

@@ -103,4 +103,69 @@ public sealed class JsonContractTests
         Assert.NotNull(response);
         Assert.Equal(2, response!.NextFires.Count);
     }
+
+    [Fact]
+    public void ReconcileResponse_deserializes_server_plan_shape()
+    {
+        // Mirrors the documented /api/reconcile response (docs/CRON_AS_CODE.md): a per-action
+        // summary plus a flat, action-keyed changes list. Regression guard for the contract drift
+        // where the CLI read non-existent creates/updates arrays and reported every plan as empty.
+        const string payload = """
+        {
+          "namespace": "prod",
+          "summary": { "create": 1, "update": 1, "delete": 0, "no_change": 2, "errors": 0 },
+          "changes": [
+            { "resource": "job", "key": "new-job", "action": "create", "diff": null },
+            { "resource": "job", "key": "weekly-digest", "action": "update",
+              "diff": [ { "field": "url", "from": "https://example.com", "to": "https://changed.com" } ] },
+            { "resource": "channel", "key": "oncall", "action": "no_change", "diff": null }
+          ],
+          "errors": [],
+          "applied": false
+        }
+        """;
+
+        var plan = JsonSerializer.Deserialize<ReconcileResponse>(payload, SteadyCronJson.Options);
+
+        Assert.NotNull(plan);
+        Assert.False(plan!.Applied);
+        Assert.Equal("prod", plan.Namespace);
+        Assert.Equal(1, plan.Summary.Create);
+        Assert.Equal(1, plan.Summary.Update);
+        Assert.Equal(2, plan.Summary.NoChange);
+        Assert.True(plan.HasWork);
+
+        Assert.Equal(3, plan.Changes.Count);
+        var update = Assert.Single(plan.Changes, c => c.Action == "update");
+        Assert.Equal("weekly-digest", update.Key);
+        Assert.NotNull(update.Diff);
+        var diff = Assert.Single(update.Diff!);
+        Assert.Equal("url", diff.Field);
+        Assert.Equal("https://example.com", diff.From);
+        Assert.Equal("https://changed.com", diff.To);
+    }
+
+    [Fact]
+    public void ReconcileResponse_surfaces_plan_errors()
+    {
+        const string payload = """
+        {
+          "namespace": "prod",
+          "summary": { "create": 0, "update": 0, "delete": 0, "no_change": 0, "errors": 1 },
+          "changes": [],
+          "errors": [
+            { "resource": "job", "key": "job-5", "code": "plan_job_limit_exceeded", "message": "Too many jobs." }
+          ],
+          "applied": false
+        }
+        """;
+
+        var plan = JsonSerializer.Deserialize<ReconcileResponse>(payload, SteadyCronJson.Options);
+
+        Assert.NotNull(plan);
+        Assert.False(plan!.HasWork);
+        var error = Assert.Single(plan.Errors);
+        Assert.Equal("plan_job_limit_exceeded", error.Code);
+        Assert.Equal("job-5", error.Key);
+    }
 }
