@@ -6,6 +6,25 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-04
+
+### Added
+- Manifest v2: `namespace`, `channels`, `tags`, `variables`, `shaping`, `id`/`tags`/`rules` on jobs.
+- `steadycron validate [paths...]` — local schema + cross-reference lint, no API call (exit 0/2).
+- `steadycron plan [paths...]` — dry-run via `/api/reconcile`; renders the server's authoritative plan.
+  `--output json` emits the raw plan for CI tooling. `--detailed-exitcode` exits 2 on drift.
+- `steadycron apply [paths...]` — alias for `sync --yes`.
+- `steadycron export` — exports the account (or jobs/single job) as a v2 manifest.
+- `${ENV_VAR}` and `${ENV_VAR:-default}` interpolation in any manifest field at load time.
+- Multi-file / directory manifest loading; duplicate-id and version/namespace agreement checks.
+- `--namespace` flag on `sync`/`plan`/`apply`; required by `--prune`.
+- GitHub Action (`action/action.yml`): plan on PRs with sticky comment, apply on merge.
+
+### Changed
+- `sync` now calls `POST /api/reconcile`; the server is the authoritative plan source.
+- Exit code 5 renamed from `SyncIncomplete` to `PlanErrors` (same value, broader meaning).
+- v1 manifests (jobs-only, no namespace) load with a deprecation warning.
+
 ## [1.1.0] - 2026-06-03
 
 ### Added
