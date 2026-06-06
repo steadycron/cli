@@ -119,6 +119,43 @@ See [`examples/steadycron.yaml`](examples/steadycron.yaml) for the complete fiel
 The CLI resolves `${...}` before sending the manifest to the API. `{{...}}` is passed through
 untouched and substituted by the server when the job fires.
 
+### Secrets and `.env` files
+
+Secret fields never leave the server in plaintext: on `export` they come back as `${SC_…}`
+placeholders (alert-channel credentials such as `webhook_url`/`bot_token`/`secret`/webhook headers,
+and **template-variable values**). To `apply` such a manifest you must supply those values.
+
+Provide them with one or more `--env-file` flags (repeatable; values take precedence over the
+process environment so a file prepared for the target account is authoritative):
+
+```bash
+steadycron apply production.yaml --namespace prod --env-file secrets.env
+```
+
+When a manifest references any required `${...}` placeholder, `apply`/`sync`/`plan` **refuse to run
+without an `--env-file`** — pass one, or `--allow-process-env` to source the values from the current
+environment instead (e.g. CI that injects secrets as env vars). `validate` supports `--env-file` but
+never enforces this (it's a local, read-only lint).
+
+### Restoring to another account
+
+`export` + `apply` move a whole account — jobs, channels, tags, **variable values**, rules — to a
+fresh one over the CLI, no UI required:
+
+```bash
+# 1. On the source account: export the manifest and a scaffold of the secrets it needs.
+steadycron export -o production.yaml --write-env secrets.env
+
+# 2. Fill in secrets.env with the real values (it lists every ${SC_…} the manifest references).
+
+# 3. On the target account (different API key): apply, sourcing the secrets from the file.
+steadycron apply production.yaml --namespace prod --prune --env-file secrets.env
+```
+
+The server recreates every resource and sets channel credentials and variable values from the
+placeholders your `.env` resolves. (Variable-value round-trip requires a server that supports it;
+older servers export variable names only.)
+
 ### v1 manifests (deprecated)
 
 Version 1 (jobs-only, name-keyed, no namespace/channels/tags/variables) is still accepted. The CLI
@@ -186,18 +223,23 @@ Applies immediately without prompting. Typical use: CI pipelines on merge to the
 
 ```bash
 steadycron export -o steadycron.yaml                     # whole account → file
+steadycron export -o steadycron.yaml --write-env secrets.env   # + a .env scaffold for its secrets
 steadycron export --scope jobs -o jobs.yaml              # jobs only
 steadycron export --scope job weekly-digest-email        # single job → stdout
-steadycron export --namespace prod                       # stamp namespace in the output
 steadycron export --format json                          # JSON instead of YAML
 ```
 
-Writes the manifest verbatim from the server. Secret fields are replaced with `${PLACEHOLDER}`
-references; the CLI prints a summary of required environment variables to stderr so piping stays
-clean.
+Writes the manifest verbatim from the server. Secret fields — alert-channel credentials
+(`webhook_url`, `bot_token`, `secret`, webhook headers) **and template-variable values** — are
+replaced with `${SC_…}` placeholders, never plaintext. The CLI prints a summary of the required
+environment variables to stderr (so piping with `-o` stays clean), and the manifest itself carries a
+`# required env vars:` header block.
+
+`--write-env <path>` writes a ready-to-fill `.env` scaffold listing every referenced secret
+(refuses to overwrite an existing file). Fill it in, then `apply … --env-file <path>`.
 
 Useful for bootstrapping: export your current account, commit the result, and manage it as code
-going forward.
+going forward. To move an account to a new one, see [Restoring to another account](#restoring-to-another-account).
 
 ### Multi-file manifests
 

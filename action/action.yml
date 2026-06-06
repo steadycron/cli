@@ -37,13 +37,20 @@ inputs:
       (plan on pull_request events, apply on push to default branch).
     required: false
     default: auto
+  env-file:
+    description: >
+      Path to a .env file supplying the manifest's ${...} secret values. When empty, secrets are
+      sourced from the workflow environment (--allow-process-env) — inject them as env vars on the
+      job/step in the usual GitHub Actions way.
+    required: false
+    default: ""
 
 outputs:
   plan-json:
     description: The raw server plan JSON from `steadycron plan --output json`.
     value: ${{ steps.plan.outputs.plan_json }}
   has-drift:
-    description: "true" when the plan detected changes.
+    description: '"true" when the plan detected changes.'
     value: ${{ steps.plan.outputs.has_drift }}
 
 runs:
@@ -113,12 +120,14 @@ runs:
         MANIFEST_PATH: ${{ inputs.manifest-path }}
         NAMESPACE: ${{ inputs.namespace }}
         PRUNE: ${{ inputs.prune }}
+        ENV_FILE: ${{ inputs.env-file }}
       run: |
         set -euo pipefail
 
         ARGS=("$MANIFEST_PATH" --output json --detailed-exitcode)
         [ -n "$NAMESPACE" ] && ARGS+=(--namespace "$NAMESPACE")
         [ "$PRUNE" = "true" ] && ARGS+=(--prune)
+        if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
 
         PLAN_JSON=$(steadycron plan "${ARGS[@]}") && EXIT=$? || EXIT=$?
 
@@ -221,11 +230,13 @@ runs:
         MANIFEST_PATH: ${{ inputs.manifest-path }}
         NAMESPACE: ${{ inputs.namespace }}
         PRUNE: ${{ inputs.prune }}
+        ENV_FILE: ${{ inputs.env-file }}
       run: |
         set -euo pipefail
 
         ARGS=("$MANIFEST_PATH" --yes)
         [ -n "$NAMESPACE" ] && ARGS+=(--namespace "$NAMESPACE")
         [ "$PRUNE" = "true" ] && ARGS+=(--prune)
+        if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
 
         steadycron apply "${ARGS[@]}"

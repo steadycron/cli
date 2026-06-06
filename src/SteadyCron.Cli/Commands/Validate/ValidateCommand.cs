@@ -16,8 +16,14 @@ public sealed class ValidateSettings : CommandSettings
     [Description("Suppress the v1 deprecation warning.")]
     public bool NoWarnV1 { get; set; }
 
+    [CommandOption("--env-file <PATH>")]
+    [Description("Load ${...} values from a .env file (repeatable) so the manifest interpolates during the lint.")]
+    public string[]? EnvFiles { get; set; }
+
     public IEnumerable<string> EffectivePaths =>
         Paths is { Length: > 0 } ? Paths : ["jobs.yaml"];
+
+    public IReadOnlyList<string> EnvFileList => EnvFiles ?? [];
 }
 
 /// <summary>
@@ -40,7 +46,12 @@ public sealed class ValidateCommand : Command<ValidateSettings>
         ManifestFile manifest;
         try
         {
-            manifest = _loader.LoadFromPaths(settings.EffectivePaths);
+            // Validate is a local read-only lint, so the env-file guardrail is not enforced here;
+            // --env-file is supported only to let manifests with ${...} interpolate during the lint.
+            var getVar = ManifestEnvironment.Build(
+                settings.EffectivePaths, settings.EnvFileList,
+                allowProcessEnv: true, enforceEnvFile: false);
+            manifest = _loader.LoadFromPaths(settings.EffectivePaths, getVar);
         }
         catch (ManifestException ex)
         {

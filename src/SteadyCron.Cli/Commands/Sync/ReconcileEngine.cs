@@ -29,11 +29,15 @@ public sealed class ReconcileEngine
         bool forceYes,
         CancellationToken ct)
     {
-        // Load + env-interpolate
+        // Load + env-interpolate. The env-file guardrail (mandatory when the manifest references
+        // required ${...} placeholders) is enforced here, before any API call.
         ManifestFile manifest;
         try
         {
-            manifest = _loader.LoadFromPaths(settings.EffectivePaths);
+            var getVar = ManifestEnvironment.Build(
+                settings.EffectivePaths, settings.EnvFileList,
+                allowProcessEnv: settings.AllowProcessEnv, enforceEnvFile: true);
+            manifest = _loader.LoadFromPaths(settings.EffectivePaths, getVar);
         }
         catch (ManifestException ex)
         {

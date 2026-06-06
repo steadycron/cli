@@ -107,7 +107,12 @@ public sealed class ManifestLoader
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    private static IEnumerable<string> ExpandPaths(IEnumerable<string> paths)
+    /// <summary>
+    /// Expands the given file/directory paths into a flat list of manifest files. Directories are
+    /// globbed for <c>*.yaml</c>/<c>*.yml</c>; non-directory paths pass through verbatim. Shared with
+    /// the env-file guardrail so it scans exactly the files the loader will read.
+    /// </summary>
+    public static IEnumerable<string> ExpandPaths(IEnumerable<string> paths)
     {
         foreach (var path in paths)
         {

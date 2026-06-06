@@ -6,6 +6,26 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-06
+
+### Added
+- `--env-file <path>` (repeatable) on `sync`/`plan`/`apply`/`validate` — loads `${...}` secret values
+  from a `.env` file. File values take precedence over the process environment.
+- `steadycron export --write-env <path>` — writes a ready-to-fill `.env` scaffold listing every
+  `${SC_…}` secret the exported manifest references (refuses to overwrite an existing file).
+- `--allow-process-env` on `sync`/`plan`/`apply` — opt back in to sourcing secrets from the process
+  environment (e.g. CI), bypassing the new env-file requirement.
+- Template-variable **values** now round-trip through `export`→`apply`: `export` emits each value as a
+  `${SC_VAR_<NAME>}` placeholder and reconcile sets/updates the value (masked in plans). This makes
+  restoring an account to a different one fully CLI-driven (see the README restore runbook). Requires a
+  server that supports it; older servers export variable names only.
+
+### Changed
+- When a manifest references any required `${...}` placeholder, `sync`/`plan`/`apply` now refuse to run
+  unless an `--env-file` is supplied (or `--allow-process-env` is passed). This is a guardrail against
+  accidentally applying with secrets sourced from an ambient environment. CI that injects secrets as
+  env vars should add `--allow-process-env`.
+
 ## [1.2.2] - 2026-06-06
 
 ### Fixed
@@ -66,6 +86,7 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/steadycron/cli/compare/v1.2.2...v1.3.0
 [1.1.0]: https://github.com/steadycron/cli/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/steadycron/cli/releases/tag/v1.0.0

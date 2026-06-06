@@ -56,11 +56,13 @@ app.Configure(config =>
 
     config.AddCommand<ApplyCommand>("apply")
         .WithDescription("Apply a manifest without confirmation prompt (alias for sync --yes).")
-        .WithExample("apply", "./manifests/", "--namespace", "prod", "--prune");
+        .WithExample("apply", "./manifests/", "--namespace", "prod", "--prune")
+        .WithExample("apply", "production.yaml", "-n", "prod", "--env-file", "secrets.env");
 
     config.AddCommand<ExportCommand>("export")
         .WithDescription("Export your account (or a subset) as a v2 manifest.")
         .WithExample("export", "-o", "steadycron.yaml")
+        .WithExample("export", "-o", "steadycron.yaml", "--write-env", "secrets.env")
         .WithExample("export", "--scope", "jobs")
         .WithExample("export", "--scope", "job", "weekly-digest-email");
 

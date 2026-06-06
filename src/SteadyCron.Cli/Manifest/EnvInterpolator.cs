@@ -86,4 +86,23 @@ public static class EnvInterpolator
 
         return [.. names.OrderBy(n => n, StringComparer.Ordinal)];
     }
+
+    /// <summary>
+    /// Scans <paramref name="text"/> for placeholders that <b>must</b> be supplied — i.e. those
+    /// referenced at least once without a <c>:-default</c>. Names that only ever appear with a
+    /// default are excluded. Used by the env-file guardrail on <c>sync</c>/<c>plan</c>/<c>apply</c>.
+    /// </summary>
+    public static IReadOnlyList<string> FindRequiredPlaceholders(string text)
+    {
+        var required = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in PlaceholderRegex.Matches(text))
+        {
+            if (!match.Groups[2].Success)
+            {
+                required.Add(match.Groups[1].Value);
+            }
+        }
+
+        return [.. required.OrderBy(n => n, StringComparer.Ordinal)];
+    }
 }

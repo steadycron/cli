@@ -38,8 +38,18 @@ public class SyncSettings : CliSettings
     [Description("Suppress the v1 manifest deprecation warning.")]
     public bool NoWarnV1 { get; set; }
 
+    [CommandOption("--env-file <PATH>")]
+    [Description("Load ${...} secret values from a .env file (repeatable). Takes precedence over the process environment.")]
+    public string[]? EnvFiles { get; set; }
+
+    [CommandOption("--allow-process-env")]
+    [Description("Resolve ${...} placeholders from the process environment without requiring an --env-file.")]
+    public bool AllowProcessEnv { get; set; }
+
     public IEnumerable<string> EffectivePaths =>
         Paths is { Length: > 0 } ? Paths : ["jobs.yaml"];
+
+    public IReadOnlyList<string> EnvFileList => EnvFiles ?? [];
 }
 
 /// <summary>

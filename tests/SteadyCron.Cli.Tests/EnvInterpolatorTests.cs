@@ -90,4 +90,26 @@ public sealed class EnvInterpolatorTests
         var names = EnvInterpolator.FindPlaceholders("{{template_var}} and plain text");
         Assert.Empty(names);
     }
+
+    [Fact]
+    public void FindRequiredPlaceholders_excludes_defaulted()
+    {
+        var names = EnvInterpolator.FindRequiredPlaceholders("${REQUIRED} ${OPTIONAL:-x}");
+        Assert.Equal(["REQUIRED"], names);
+    }
+
+    [Fact]
+    public void FindRequiredPlaceholders_required_when_any_occurrence_lacks_default()
+    {
+        // FOO appears without a default once and with one once → still required.
+        var names = EnvInterpolator.FindRequiredPlaceholders("${FOO} and ${FOO:-x}");
+        Assert.Equal(["FOO"], names);
+    }
+
+    [Fact]
+    public void FindRequiredPlaceholders_empty_when_all_defaulted()
+    {
+        var names = EnvInterpolator.FindRequiredPlaceholders("${A:-1} ${B:-2}");
+        Assert.Empty(names);
+    }
 }
