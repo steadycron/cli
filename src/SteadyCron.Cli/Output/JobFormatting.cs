@@ -13,10 +13,10 @@ public static class JobFormatting
         {
             "success" => "green",
             "running" => "blue",
-            "late" => "yellow",
+            "late" or "abandoned" => "yellow",
             "skipped" => "grey",
             "paused" => "grey",
-            "missed" or "failure" or "abandoned" => "red",
+            "missed" or "failure" => "red",
             _ => "grey",
         };
         return $"[{color}]{Markup.Escape(s)}[/]";

@@ -6,6 +6,13 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-06
+
+### Fixed
+- Job status output now renders `abandoned` in amber (warning) instead of red, aligning the CLI
+  with the shared SteadyCron status-color guide — `abandoned` (a run that started but never
+  completed) is an attention state, not a confirmed failure.
+
 ## [1.2.1] - 2026-06-04
 
 ### Fixed
