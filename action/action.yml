@@ -1,7 +1,5 @@
 name: SteadyCron
-description: >
-  Plan or apply a SteadyCron manifest. Posts a sticky plan diff as a PR comment
-  when command is "plan" and comment-on-pr is "true".
+description: 'Plan or apply a SteadyCron manifest. Plan diffs on pull requests, apply on merge — GitOps for cron.'
 
 author: SteadyCron
 
