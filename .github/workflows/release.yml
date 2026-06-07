@@ -106,3 +106,41 @@ jobs:
           files: release/*
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+  mirror-action:
+    name: Mirror to steadycron/action
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push action.yml and tags to steadycron/action
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/steadycron/action.git" action-repo
+          cp action/action.yml action-repo/action.yml
+
+          cd action-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+
+          if git diff --staged --quiet; then
+            echo "action.yml unchanged — skipping commit"
+          else
+            git commit -m "chore: sync action.yml from cli ${TAG}"
+            git push
+          fi
+
+          # Specific version tag (e.g. v1.3.0)
+          git tag "${TAG}"
+          git push origin "${TAG}"
+
+          # Floating major version tag (e.g. v1) — force-move on each release
+          MAJOR_TAG=$(echo "${TAG}" | grep -oP '^v\d+')
+          git tag -f "${MAJOR_TAG}"
+          git push --force origin "${MAJOR_TAG}"

@@ -4,7 +4,7 @@
 # Prerequisites:
 #   - Add your API key as a repository secret: STEADYCRON_API_KEY
 
-name: SteadyCron Apply
+name: Cron apply
 
 on:
   push:
@@ -25,10 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./action   # use the bundled action (or: steadycron/sync-action@v1 once published)
+      - uses: steadycron/action@v1
         with:
-          manifest-path: steadycron/
-          namespace: prod
-          prune: "true"   # delete server resources removed from the manifest
-          api-key: ${{ secrets.STEADYCRON_API_KEY }}
-          mode: apply
+          command: apply
+          manifest: steadycron.yaml
+          prune: 'true'   # delete server resources removed from the manifest
+        env:
+          STEADYCRON_API_KEY: ${{ secrets.STEADYCRON_API_KEY }}

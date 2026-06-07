@@ -5,7 +5,7 @@
 #   - Add your API key as a repository secret: STEADYCRON_API_KEY
 #   - Give the workflow write permission on pull-request comments (see permissions below)
 
-name: SteadyCron Plan
+name: Cron plan
 
 on:
   pull_request:
@@ -25,10 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./action   # use the bundled action (or: steadycron/sync-action@v1 once published)
+      - uses: steadycron/action@v1
         with:
-          manifest-path: steadycron/
-          namespace: prod
-          api-key: ${{ secrets.STEADYCRON_API_KEY }}
-          mode: plan
-          # prune: "true"   # uncomment if you want --prune reflected in the plan diff
+          command: plan
+          manifest: steadycron.yaml
+          comment-on-pr: 'true'
+        env:
+          STEADYCRON_API_KEY: ${{ secrets.STEADYCRON_API_KEY }}

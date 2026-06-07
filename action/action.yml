@@ -1,7 +1,7 @@
-name: SteadyCron Sync
+name: SteadyCron
 description: >
-  Plan or apply a SteadyCron manifest. On pull requests it posts a plan diff as a sticky
-  PR comment; on push to the default branch it applies the manifest.
+  Plan or apply a SteadyCron manifest. Posts a sticky plan diff as a PR comment
+  when command is "plan" and comment-on-pr is "true".
 
 author: SteadyCron
 
@@ -10,47 +10,44 @@ branding:
   color: blue
 
 inputs:
-  manifest-path:
-    description: >
-      Path to the manifest file or directory (glob of *.yaml/*.yml inside a directory).
-      Defaults to the repo root.
+  command:
+    description: 'plan, apply, validate, or sync'
+    required: false
+    default: plan
+  manifest:
+    description: 'Path to the manifest file or directory'
     required: false
     default: .
-  namespace:
-    description: Account namespace. Required when using prune.
-    required: false
-    default: ""
   prune:
-    description: Delete server resources not declared in the manifest.
+    description: 'If true, pass --prune to apply/sync (delete server resources not in the manifest)'
     required: false
     default: "false"
-  api-key:
-    description: SteadyCron API key (sc_…). Pass via secrets.STEADYCRON_API_KEY.
-    required: true
+  comment-on-pr:
+    description: 'If true, post the plan output as a sticky PR comment'
+    required: false
+    default: "false"
+  namespace:
+    description: 'Account namespace. Required when using --prune across multiple namespaces.'
+    required: false
+    default: ""
   cli-version:
-    description: CLI version to install (e.g. "1.2.0"). Defaults to latest.
+    description: 'CLI version to install (e.g. "1.3.0"). Defaults to latest.'
     required: false
     default: latest
-  mode:
-    description: >
-      Execution mode: "plan" (dry-run + PR comment), "apply" (apply --yes), or "auto"
-      (plan on pull_request events, apply on push to default branch).
-    required: false
-    default: auto
   env-file:
     description: >
-      Path to a .env file supplying the manifest's ${...} secret values. When empty, secrets are
-      sourced from the workflow environment (--allow-process-env) — inject them as env vars on the
-      job/step in the usual GitHub Actions way.
+      Path to a .env file supplying the manifest's ${...} secret values. When empty,
+      secrets are sourced from the workflow environment via --allow-process-env — pass
+      them as env vars on the step in the usual GitHub Actions way.
     required: false
     default: ""
 
 outputs:
   plan-json:
-    description: The raw server plan JSON from `steadycron plan --output json`.
+    description: The raw server plan JSON from `steadycron plan --output json` (set when command is "plan")
     value: ${{ steps.plan.outputs.plan_json }}
   has-drift:
-    description: '"true" when the plan detected changes.'
+    description: '"true" when the plan detected changes'
     value: ${{ steps.plan.outputs.has_drift }}
 
 runs:
@@ -73,58 +70,51 @@ runs:
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
         case "$ARCH" in
-          x86_64) ARCH="x64" ;;
+          x86_64)        ARCH="x64" ;;
           aarch64|arm64) ARCH="arm64" ;;
           *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
         esac
+        case "$OS" in
+          linux)  OS_RID="linux" ;;
+          darwin) OS_RID="osx" ;;
+          *) echo "Unsupported OS: $OS"; exit 1 ;;
+        esac
 
-        ARCHIVE="steadycron-${VERSION}-${OS}-${ARCH}.tar.gz"
-        URL="https://github.com/steadycron/cli/releases/download/v${VERSION}/${ARCHIVE}"
+        BINARY="steadycron-${OS_RID}-${ARCH}"
+        URL="https://github.com/steadycron/cli/releases/download/v${VERSION}/${BINARY}"
 
-        echo "Installing SteadyCron CLI v${VERSION} (${OS}/${ARCH})…"
-        curl -sfL "$URL" | tar -xz -C /usr/local/bin steadycron
+        echo "Installing SteadyCron CLI v${VERSION} (${OS_RID}/${ARCH})…"
+        curl -sfL -o /usr/local/bin/steadycron "$URL"
         chmod +x /usr/local/bin/steadycron
         steadycron --version
 
-    # ── Resolve mode ──────────────────────────────────────────────────────────────
-    - name: Resolve mode
-      id: mode
+    # ── Validate ──────────────────────────────────────────────────────────────────
+    - name: Validate
+      if: inputs.command == 'validate'
       shell: bash
       env:
-        INPUT_MODE: ${{ inputs.mode }}
-        GITHUB_EVENT_NAME: ${{ github.event_name }}
-        GITHUB_REF_NAME: ${{ github.ref_name }}
-        GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        MANIFEST: ${{ inputs.manifest }}
+        ENV_FILE: ${{ inputs.env-file }}
       run: |
         set -euo pipefail
-        MODE="$INPUT_MODE"
-        if [ "$MODE" = "auto" ]; then
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            MODE="plan"
-          elif [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "$GITHUB_DEFAULT_BRANCH" ]; then
-            MODE="apply"
-          else
-            MODE="plan"
-          fi
-        fi
-        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
-        echo "Resolved mode: $MODE"
+        ARGS=("$MANIFEST")
+        if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
+        steadycron validate "${ARGS[@]}"
 
-    # ── Run plan ──────────────────────────────────────────────────────────────────
+    # ── Plan ──────────────────────────────────────────────────────────────────────
     - name: Plan
       id: plan
-      if: steps.mode.outputs.mode == 'plan'
+      if: inputs.command == 'plan'
       shell: bash
       env:
-        STEADYCRON_API_KEY: ${{ inputs.api-key }}
-        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        MANIFEST: ${{ inputs.manifest }}
         NAMESPACE: ${{ inputs.namespace }}
         PRUNE: ${{ inputs.prune }}
         ENV_FILE: ${{ inputs.env-file }}
       run: |
         set -euo pipefail
 
-        ARGS=("$MANIFEST_PATH" --output json --detailed-exitcode)
+        ARGS=("$MANIFEST" --output json --detailed-exitcode)
         [ -n "$NAMESPACE" ] && ARGS+=(--namespace "$NAMESPACE")
         [ "$PRUNE" = "true" ] && ARGS+=(--prune)
         if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
@@ -135,21 +125,21 @@ runs:
         echo "$PLAN_JSON" >> "$GITHUB_OUTPUT"
         echo "EOF" >> "$GITHUB_OUTPUT"
 
-        # exit 2 means drift; anything else (0 = clean, 5 = errors) is handled below
+        # exit 2 = drift detected (not an error)
         if [ $EXIT -eq 2 ]; then
           echo "has_drift=true" >> "$GITHUB_OUTPUT"
         else
           echo "has_drift=false" >> "$GITHUB_OUTPUT"
         fi
 
-        # Propagate errors (exit 5) but treat drift (exit 2) as success for this step
+        # Propagate real errors (exit 5) but treat drift (exit 2) as success for this step
         if [ $EXIT -ne 0 ] && [ $EXIT -ne 2 ]; then
           exit $EXIT
         fi
 
     # ── Post PR comment ──────────────────────────────────────────────────────────
     - name: Post plan as PR comment
-      if: steps.mode.outputs.mode == 'plan' && github.event_name == 'pull_request'
+      if: inputs.command == 'plan' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -162,13 +152,11 @@ runs:
 
         MARKER="<!-- steadycron-plan-comment -->"
 
-        # Format the plan JSON into a markdown summary
         CREATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('creates',[])))")
         UPDATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('updates',[])))")
         DELETES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('deletes',[])))")
-        ERRORS=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('errors',[])))")
+        ERRORS=$(echo  "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('errors',[])))")
 
-        HEADER="## SteadyCron Plan — \`${SHA:0:7}\`"
         if [ "$ERRORS" -gt 0 ]; then
           STATUS="❌ **Plan has errors — apply blocked.** Fix them before merging."
         elif [ "$CREATES" -eq 0 ] && [ "$UPDATES" -eq 0 ] && [ "$DELETES" -eq 0 ]; then
@@ -177,8 +165,10 @@ runs:
           STATUS="📋 **${CREATES} to create · ${UPDATES} to update · ${DELETES} to delete**"
         fi
 
-        BODY="${MARKER}
-        ${HEADER}
+        BODY_FILE=$(mktemp)
+        cat > "$BODY_FILE" <<MARKDOWN
+        ${MARKER}
+        ## SteadyCron Plan — \`${SHA:0:7}\`
 
         ${STATUS}
 
@@ -191,25 +181,26 @@ runs:
 
         </details>
 
-        > Triggered by commit \`${SHA:0:7}\`. Re-run the workflow to refresh."
+        > Triggered by commit \`${SHA:0:7}\`. Re-run the workflow to refresh.
+        MARKDOWN
 
-        # Find existing comment with the marker
         EXISTING_ID=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
           --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
 
         if [ -n "$EXISTING_ID" ]; then
           gh api "repos/${REPO}/issues/comments/${EXISTING_ID}" \
-            -X PATCH --field "body=${BODY}" > /dev/null
+            -X PATCH -F "body=@${BODY_FILE}" > /dev/null
           echo "Updated existing plan comment #${EXISTING_ID}"
         else
           gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
-            --field "body=${BODY}" > /dev/null
+            -F "body=@${BODY_FILE}" > /dev/null
           echo "Posted new plan comment"
         fi
+        rm "$BODY_FILE"
 
     # ── Fail check if plan has errors ────────────────────────────────────────────
     - name: Fail on plan errors
-      if: steps.mode.outputs.mode == 'plan'
+      if: inputs.command == 'plan'
       shell: bash
       env:
         PLAN_JSON: ${{ steps.plan.outputs.plan_json }}
@@ -223,20 +214,38 @@ runs:
 
     # ── Apply ─────────────────────────────────────────────────────────────────────
     - name: Apply
-      if: steps.mode.outputs.mode == 'apply'
+      if: inputs.command == 'apply'
       shell: bash
       env:
-        STEADYCRON_API_KEY: ${{ inputs.api-key }}
-        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        MANIFEST: ${{ inputs.manifest }}
         NAMESPACE: ${{ inputs.namespace }}
         PRUNE: ${{ inputs.prune }}
         ENV_FILE: ${{ inputs.env-file }}
       run: |
         set -euo pipefail
 
-        ARGS=("$MANIFEST_PATH" --yes)
+        ARGS=("$MANIFEST" --yes)
         [ -n "$NAMESPACE" ] && ARGS+=(--namespace "$NAMESPACE")
         [ "$PRUNE" = "true" ] && ARGS+=(--prune)
         if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
 
         steadycron apply "${ARGS[@]}"
+
+    # ── Sync ──────────────────────────────────────────────────────────────────────
+    - name: Sync
+      if: inputs.command == 'sync'
+      shell: bash
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+        NAMESPACE: ${{ inputs.namespace }}
+        PRUNE: ${{ inputs.prune }}
+        ENV_FILE: ${{ inputs.env-file }}
+      run: |
+        set -euo pipefail
+
+        ARGS=("$MANIFEST")
+        [ -n "$NAMESPACE" ] && ARGS+=(--namespace "$NAMESPACE")
+        [ "$PRUNE" = "true" ] && ARGS+=(--prune)
+        if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
+
+        steadycron sync "${ARGS[@]}"
