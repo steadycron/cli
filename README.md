@@ -1,5 +1,9 @@
 # SteadyCron CLI
 
+[![NuGet](https://img.shields.io/nuget/v/steadycron.svg?logo=nuget)](https://www.nuget.org/packages/steadycron)
+[![CI](https://github.com/steadycron/cli/actions/workflows/ci.yml/badge.svg)](https://github.com/steadycron/cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/steadycron/cli/blob/main/LICENSE)
+
 The official command-line interface for [SteadyCron](https://steadycron.com) — schedule, run, and
 monitor cron jobs as code. Declare your entire account — jobs, alert channels, tags, variables —
 in a YAML manifest, commit it to your repo, and reconcile with a single command:
@@ -274,18 +278,24 @@ permissions:
   pull-requests: write
 
 jobs:
-  sync:
+  steadycron:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./action   # or: steadycron/sync-action@v1
+      - uses: steadycron/action@v1
         with:
-          manifest-path: steadycron/
+          # plan on PRs, apply on push to main
+          command: ${{ github.event_name == 'pull_request' && 'plan' || 'apply' }}
+          manifest: steadycron/
           namespace: prod
           prune: "true"
-          api-key: ${{ secrets.STEADYCRON_API_KEY }}
-          mode: auto   # plan on PRs, apply on push to main
+          comment-on-pr: "true"
+        env:
+          STEADYCRON_API_KEY: ${{ secrets.STEADYCRON_API_KEY }}
 ```
+
+The API key is read from the `STEADYCRON_API_KEY` environment variable (a repository secret), not a
+`with:` input — this keeps it out of the action's logged inputs.
 
 The action:
 1. Installs the CLI (pinned version).

@@ -6,6 +6,13 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-07
+
+### Added
+- The GitHub Action is now published to its own [`steadycron/action`](https://github.com/steadycron/action)
+  repository and the GitHub Marketplace — reference it as `steadycron/action@v1`. The release workflow
+  mirrors `action/action.yml` on each tagged release and moves the floating `v1` major tag.
+
 ## [1.3.0] - 2026-06-06
 
 ### Added
@@ -86,7 +93,11 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/steadycron/cli/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/steadycron/cli/compare/v1.2.2...v1.3.0
+[1.2.2]: https://github.com/steadycron/cli/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/steadycron/cli/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/steadycron/cli/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/steadycron/cli/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/steadycron/cli/releases/tag/v1.0.0
