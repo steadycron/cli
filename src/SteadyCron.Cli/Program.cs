@@ -6,6 +6,7 @@ using SteadyCron.Cli.Commands.Channels;
 using SteadyCron.Cli.Commands.Config;
 using SteadyCron.Cli.Commands.Cron;
 using SteadyCron.Cli.Commands.Export;
+using SteadyCron.Cli.Commands.Import;
 using SteadyCron.Cli.Commands.Jobs;
 using SteadyCron.Cli.Commands.Rules;
 using SteadyCron.Cli.Commands.Sync;
@@ -65,6 +66,21 @@ app.Configure(config =>
         .WithExample("export", "-o", "steadycron.yaml", "--write-env", "secrets.env")
         .WithExample("export", "--scope", "jobs")
         .WithExample("export", "--scope", "job", "weekly-digest-email");
+
+    config.AddBranch("import", import =>
+    {
+        import.SetDescription("Generate a v2 manifest from an existing crontab or vercel.json.");
+        import.AddCommand<ImportCrontabCommand>("crontab")
+            .WithDescription("Convert a crontab file into a v2 manifest.")
+            .WithExample("import", "crontab", "crontab.txt", "-o", "steadycron.yaml")
+            .WithExample("import", "crontab", "--dry-run")
+            .WithExample("import", "crontab", "--as", "heartbeat", "-o", "monitors.yaml");
+        import.AddCommand<ImportVercelCommand>("vercel")
+            .WithDescription("Convert a vercel.json cron config into a v2 manifest.")
+            .WithExample("import", "vercel", "--base-url", "https://app.example.com", "-o", "steadycron.yaml")
+            .WithExample("import", "vercel", "--base-url", "https://app.example.com",
+                "--cron-secret-env", "VERCEL_CRON_SECRET");
+    });
 
     config.AddBranch("jobs", jobs =>
     {

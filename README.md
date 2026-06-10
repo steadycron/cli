@@ -258,6 +258,118 @@ steadycron apply manifests/channels.yaml manifests/jobs.yaml --namespace prod
 When multiple files are used, they must agree on `version` and `namespace`. Duplicate resource `id`
 values across files are an error.
 
+## Importing existing schedules
+
+`import` generates a v2 manifest from a crontab or `vercel.json` file — client-side only, no API
+calls. Review the result, then `sync` it.
+
+### `import crontab` — migrate from a crontab
+
+```bash
+# Import a crontab file
+steadycron import crontab /etc/cron.d/myjobs -o steadycron.yaml
+
+# Import from stdin (e.g. from `crontab -l`)
+crontab -l | steadycron import crontab -o steadycron.yaml
+
+# Preview what would be imported without writing anything
+steadycron import crontab mycron.txt --dry-run
+
+# System crontab (extra username column): auto-detected, or force with --system
+steadycron import crontab /etc/cron.d/myjobs --system -o steadycron.yaml
+
+# Force all entries to a specific kind
+steadycron import crontab mycron.txt --as heartbeat -o monitors.yaml
+```
+
+**Job kind mapping (`--as auto` default):**
+
+| Command type | Becomes |
+|---|---|
+| `curl`/`wget`/bare `https://…` URL | `http` job — URL, method, headers, body extracted |
+| Anything else | `heartbeat` monitor |
+
+`--as http` forces http for every entry (skips with a warning if no URL can be extracted).
+`--as heartbeat` forces heartbeat regardless of the command.
+
+**crontab conventions handled:**
+
+- `MAILTO=`, `PATH=`, and other env-assignment lines are ignored.
+- A `# comment` immediately above an entry becomes the job `name` (blank line clears it).
+- Macros: `@hourly`, `@daily`/`@midnight`, `@weekly`, `@monthly`, `@yearly`/`@annually` are
+  expanded to their 5-field equivalents.
+- `@reboot` is skipped with an actionable warning (no equivalent schedule exists).
+- System crontab / `cron.d` format (6th field is a username) is auto-detected or set with `--system`.
+
+**Heartbeat monitors — post-sync step:**
+
+When a command is imported as a heartbeat, the CLI prints the ping snippet you must append to that
+cron command (the ping token only exists after `sync` creates the monitor):
+
+```
+! Heartbeat nightly-backup (id: nightly-backup)
+   After sync, append this to your cron command:
+   && curl -fsS 'https://ping.steadycron.com/<TOKEN>'
+   (<TOKEN> available after: steadycron jobs get nightly-backup)
+```
+
+**Note on timezone:** crontab entries run in the server's local timezone. All imported entries get
+`timezone: UTC` as a safe default. Edit the `timezone` field in the manifest before `sync` if your
+cron server runs in a different timezone.
+
+### `import vercel` — migrate from Vercel cron jobs
+
+Vercel's hobby plan limits crons to once per day in UTC. Migrating to SteadyCron removes both
+restrictions.
+
+```bash
+# Basic import (--base-url required)
+steadycron import vercel --base-url https://app.example.com -o steadycron.yaml
+
+# With a cron secret (added as Authorization header; never inlined)
+steadycron import vercel \
+  --base-url https://app.example.com \
+  --cron-secret-env VERCEL_CRON_SECRET \
+  -o steadycron.yaml
+
+# Preview without writing
+steadycron import vercel --base-url https://app.example.com --dry-run
+```
+
+The importer reads `vercel.json` in the current directory (or pass an explicit path as the first
+argument). For each cron entry, it emits an `http GET` job with the full URL (`--base-url` + path)
+and `timezone: UTC`.
+
+**`--cron-secret-env NAME`** — instead of inlining the secret value, the manifest emits:
+
+```yaml
+headers:
+  Authorization: Bearer ${VERCEL_CRON_SECRET}
+```
+
+The `${…}` placeholder is resolved at `sync` time via `--env-file` or the process environment.
+The manifest itself never contains the secret.
+
+**End-to-end flow:**
+
+```bash
+# 1. Generate the manifest
+steadycron import vercel \
+  --base-url https://app.example.com \
+  --cron-secret-env VERCEL_CRON_SECRET \
+  -o steadycron.yaml
+
+# 2. Review the manifest
+steadycron validate steadycron.yaml
+
+# 3. Set the secret and sync
+echo "VERCEL_CRON_SECRET=your-secret-here" > secrets.env
+steadycron apply steadycron.yaml --env-file secrets.env --namespace prod
+```
+
+After migrating, you can tighten schedules and set per-job timezones — capabilities Vercel doesn't
+expose.
+
 ## Cron as Code in CI
 
 Add the SteadyCron GitHub Action to plan on pull requests and apply on merge:
