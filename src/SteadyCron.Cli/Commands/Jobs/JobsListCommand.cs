@@ -67,6 +67,7 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
         table.AddColumn("Schedule");
         table.AddColumn("Next run");
         table.AddColumn("Last run");
+        table.AddColumn(new TableColumn("Id").NoWrap());
 
         foreach (var job in items)
         {
@@ -76,11 +77,18 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
                 JobFormatting.StatusMarkup(job.Status),
                 Markup.Escape(JobFormatting.ScheduleWithTz(job)),
                 Markup.Escape(job.Kind == "http" ? JobFormatting.When(job.NextFireAt) : "—"),
-                Markup.Escape(JobFormatting.When(job.LastFireAt)));
+                Markup.Escape(JobFormatting.When(job.LastFireAt)),
+                $"[grey]{job.Id}[/]");
         }
 
         output.Render(table);
         output.Info($"{items.Count} job(s).");
+
+        if (items.Any(j => j.PausedReason == JobFormatting.UnverifiedEmailPauseReason))
+        {
+            output.Warn(JobFormatting.UnverifiedEmailWarning);
+        }
+
         return ExitCodes.Ok;
     }
 }

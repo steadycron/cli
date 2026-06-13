@@ -107,6 +107,7 @@ public sealed record JobResponse
     public string? HealthState { get; init; }
     public string? BadgeUrl { get; init; }
     public string? SigningSecret { get; init; }
+    public string? PausedReason { get; init; }
 }
 
 public sealed record JobListResponse(

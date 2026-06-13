@@ -181,6 +181,18 @@ public sealed class SteadyCronClient
     public Task DeleteChannelAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"api/alert-channels/{id}", content: null, ct);
 
+    // ── Reports ──────────────────────────────────────────────────────────────────────
+
+    public Task<Models.ReportSummaryResponse> GetReportSummaryAsync(
+        int hours,
+        CancellationToken ct = default)
+    {
+        var to = DateTimeOffset.UtcNow;
+        var from = to.AddHours(-hours);
+        var query = $"api/reports/summary?from={Uri.EscapeDataString(from.ToString("O"))}&to={Uri.EscapeDataString(to.ToString("O"))}";
+        return GetAsync<Models.ReportSummaryResponse>(query, ct);
+    }
+
     // ── Alert rules ─────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<AlertRuleResponse>> ListRulesAsync(Guid jobId, CancellationToken ct = default) =>

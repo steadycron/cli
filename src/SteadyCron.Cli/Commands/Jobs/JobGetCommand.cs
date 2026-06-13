@@ -36,6 +36,11 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
         Row("name", job.Name);
         Row("kind", job.Kind);
         grid.AddRow("[grey]status[/]", JobFormatting.StatusMarkup(job.Status));
+        if (job.PausedReason is not null)
+        {
+            Row("paused_reason", job.PausedReason);
+        }
+
         Row("description", job.Description);
         Row("schedule", JobFormatting.ScheduleWithTz(job));
 
@@ -73,6 +78,12 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
         output.Render(new Panel(grid)
             .Header($"[bold]{Markup.Escape(job.Name)}[/]")
             .Border(BoxBorder.Rounded));
+
+        if (job.PausedReason == JobFormatting.UnverifiedEmailPauseReason)
+        {
+            output.Warn(JobFormatting.UnverifiedEmailWarning);
+        }
+
         return ExitCodes.Ok;
     }
 

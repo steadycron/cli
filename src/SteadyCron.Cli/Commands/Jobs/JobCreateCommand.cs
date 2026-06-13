@@ -140,6 +140,11 @@ public sealed class JobCreateCommand : SteadyCronCommandBase<JobCreateSettings>
             output.Markup($"  [grey]ping (fail):[/]    {OutputContext.Escape(ping.Fail)}");
         }
 
+        if (job.PausedReason == JobFormatting.UnverifiedEmailPauseReason)
+        {
+            output.Warn(JobFormatting.UnverifiedEmailWarning);
+        }
+
         return ExitCodes.Ok;
     }
 

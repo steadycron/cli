@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Net;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using SteadyCron.Cli.Api;
 using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Commands.Channels;
 using SteadyCron.Cli.Commands.Jobs;
@@ -74,20 +76,25 @@ public sealed class RulesListCommand : SteadyCronCommandBase<RulesListSettings>
             return ExitCodes.Ok;
         }
 
-        var channelNames = (await client.ListChannelsAsync(ct)).ToDictionary(c => c.Id, c => c.Name);
+        var channels = (await client.ListChannelsAsync(ct)).ToDictionary(c => c.Id);
 
-        var table = new Table().Border(TableBorder.Rounded);
+        var table = new Table().Border(TableBorder.Rounded).Expand();
         table.AddColumn("Trigger");
         table.AddColumn("Severity");
         table.AddColumn("Channel");
+        table.AddColumn("Kind");
+        table.AddColumn("Target");
         table.AddColumn("Dedup");
-        table.AddColumn("Id");
+        table.AddColumn(new TableColumn("Rule id").NoWrap());
         foreach (var r in rules)
         {
+            channels.TryGetValue(r.ChannelId, out var ch);
             table.AddRow(
                 Markup.Escape(r.Trigger),
                 Markup.Escape(r.Severity),
-                Markup.Escape(channelNames.GetValueOrDefault(r.ChannelId, r.ChannelId.ToString())),
+                Markup.Escape(ch?.Name ?? r.ChannelId.ToString()),
+                Markup.Escape(ch?.Kind ?? "—"),
+                Markup.Escape(ch is not null ? ChannelLookup.DescribeConfig(ch) : "—"),
                 Markup.Escape($"{r.DedupWindowSeconds}s"),
                 $"[grey]{r.Id}[/]");
         }
@@ -230,5 +237,73 @@ public sealed class RuleDeleteCommand : SteadyCronCommandBase<RuleDeleteSettings
         await client.DeleteRuleAsync(id, ct);
         output.Success($"Deleted alert rule {id}.");
         return ExitCodes.Ok;
+    }
+}
+
+public sealed class RulesTestSettings : CliSettings
+{
+    [CommandArgument(0, "<JOB>")]
+    [Description("Job id (GUID) or exact name.")]
+    public string Job { get; set; } = string.Empty;
+}
+
+/// <summary>`steadycron rules test &lt;job&gt;` — sends a test notification on every channel
+/// that has at least one alert rule configured for the given job.</summary>
+public sealed class RulesTestCommand : SteadyCronCommandBase<RulesTestSettings>
+{
+    public RulesTestCommand(ConfigResolver r, SteadyCronClientFactory f, CancellationProvider c) : base(r, f, c) { }
+
+    protected override async Task<int> RunAsync(RulesTestSettings settings, OutputContext output, CancellationToken ct)
+    {
+        var client = CreateClient(settings);
+        var job = await JobLookup.ResolveAsync(client, settings.Job, ct);
+        var rules = await client.ListRulesAsync(job.Id, ct);
+
+        if (rules.Count == 0)
+        {
+            output.Info($"No alert rules configured for '{job.Name}'. Add one with 'rules add'.");
+            return ExitCodes.Ok;
+        }
+
+        // One test per unique channel — multiple rules pointing at the same channel don't multiply tests.
+        var uniqueChannelIds = rules.Select(r => r.ChannelId).Distinct().ToList();
+        var channels = (await client.ListChannelsAsync(ct)).ToDictionary(c => c.Id);
+
+        var anyFailed = false;
+        foreach (var channelId in uniqueChannelIds)
+        {
+            channels.TryGetValue(channelId, out var ch);
+            var label = ch is not null
+                ? $"{ch.Name} ({ch.Kind} → {ChannelLookup.DescribeConfig(ch)})"
+                : channelId.ToString();
+
+            try
+            {
+                await client.TestChannelAsync(channelId, ct);
+                output.Success($"Test alert sent → {label}");
+            }
+            catch (SteadyCronApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                output.Warn($"Rate limited   → {label}: email send limit reached, try again later.");
+                anyFailed = true;
+            }
+            catch (SteadyCronApiException ex)
+            {
+                output.Error($"Failed         → {label}: {ex.Message}");
+                anyFailed = true;
+            }
+        }
+
+        output.Line();
+        if (!anyFailed)
+        {
+            output.Info($"{uniqueChannelIds.Count} channel(s) tested. Check each destination for delivery.");
+        }
+        else
+        {
+            output.Warn($"{uniqueChannelIds.Count} channel(s) tested — one or more failed (see above).");
+        }
+
+        return anyFailed ? ExitCodes.Error : ExitCodes.Ok;
     }
 }

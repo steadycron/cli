@@ -41,6 +41,12 @@ public sealed class JobResumeCommand : SteadyCronCommandBase<JobTargetSettings>
     {
         var client = CreateClient(settings);
         var job = await JobLookup.ResolveAsync(client, settings.Identifier, ct);
+
+        if (job.PausedReason == JobFormatting.UnverifiedEmailPauseReason)
+        {
+            throw new CliException(JobFormatting.UnverifiedEmailWarning, ExitCodes.Error);
+        }
+
         var updated = await client.ResumeJobAsync(job.Id, ct);
 
         if (output.Json)

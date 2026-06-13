@@ -418,6 +418,30 @@ The action:
 
 See [`examples/ci/`](examples/ci/) for standalone `pull_request` and `push` workflow files.
 
+## Activity reports
+
+```bash
+steadycron report                  # digest of the last 24 h
+steadycron report --hours 6        # shorter window
+steadycron report --hours 168      # last 7 d (Developer plan and above)
+steadycron report --hours 720      # last 30 d (Team plan only)
+steadycron report --verbose        # adds HTTP response bodies and full alert delivery list
+steadycron report --json           # machine-readable (CI alerting, dashboards)
+```
+
+The report command calls `/api/reports/summary` and shows:
+
+| Section | What you learn |
+|---|---|
+| **Summary** | Execution counts (total / success / failed), ping count, alert delivery counts |
+| **Failures** | Per-job block: last HTTP status, error message, duration, retry count, whether alerts fired |
+| **Alert deliveries** | Trigger → channel → delivered/failed/suppressed (full table in `--verbose`, problems-only otherwise) |
+| **Silent jobs** | Jobs that had zero activity in the window — schedule drift or misconfiguration |
+| **Footer** | One-line health verdict and exit code (non-zero on failures or undelivered alerts) |
+
+Plan limits cap how far back you can query (Free: 1 day, Developer: 7 days, Team: 30 days).
+The server returns a `range_exceeds_plan` error with a clear message if the requested `--hours` exceeds your limit.
+
 ## Managing resources directly
 
 ```bash
@@ -444,10 +468,17 @@ steadycron vars set digest_token "sk_live_…"
 steadycron channels list
 steadycron channels create --name "Ops email" --kind email --to ops@example.com
 
-steadycron rules list nightly-db-backup
+# `jobs list` includes a job ID column — copy the id to use with rules commands
+steadycron rules list nightly-db-backup        # shows trigger, severity, channel kind and target
 steadycron rules add nightly-db-backup \
   --channel "Ops email" --trigger missed_heartbeat --severity p1
+steadycron rules test nightly-db-backup        # fires a test alert on every channel for the job
+steadycron rules delete <rule-id>
 ```
+
+`rules test` sends one notification per unique channel (even if multiple triggers point at the
+same channel) and exits non-zero if any delivery fails — useful for verifying a new channel
+configuration from CI or a script.
 
 Add `--json` to any command for machine-readable output.
 

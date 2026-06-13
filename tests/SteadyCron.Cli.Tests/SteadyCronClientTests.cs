@@ -70,7 +70,7 @@ public sealed class SteadyCronClientTests
     {
         var handler = new StubHandler((_, _) => Task.FromResult(Json(
             HttpStatusCode.UnprocessableEntity,
-            """{"error":"plan_job_limit_exceeded","message":"Your plan allows a maximum of 4 HTTP jobs."}""")));
+            """{"error":"plan_job_limit_exceeded","message":"Your plan allows a maximum of 5 HTTP jobs."}""")));
 
         var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", "sc_secret");
 
@@ -78,7 +78,7 @@ public sealed class SteadyCronClientTests
             client.CreateJobAsync(new CreateJobRequest { Name = "x", ScheduleKind = ScheduleKind.Interval, IntervalSeconds = 60 }));
 
         Assert.Equal("plan_job_limit_exceeded", ex.ErrorCode);
-        Assert.Contains("maximum of 4", ex.Message);
+        Assert.Contains("maximum of 5", ex.Message);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, ex.StatusCode);
     }
 

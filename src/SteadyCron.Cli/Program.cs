@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SteadyCron.Cli;
+using SteadyCron.Cli.Commands;
 using SteadyCron.Cli.Commands.Channels;
 using SteadyCron.Cli.Commands.Config;
 using SteadyCron.Cli.Commands.Cron;
@@ -39,6 +40,12 @@ app.Configure(config =>
 {
     config.SetApplicationName("steadycron");
     config.SetApplicationVersion(CliVersion.Value);
+
+    config.AddCommand<ReportCommand>("report")
+        .WithDescription("Print an account-wide activity digest for a time window (default: last 24 h).")
+        .WithExample("report")
+        .WithExample("report", "--hours", "6")
+        .WithExample("report", "--hours", "168", "--verbose");
 
     config.AddCommand<ValidateCommand>("validate")
         .WithDescription("Validate a manifest locally (schema + cross-references, no API calls).")
@@ -85,7 +92,7 @@ app.Configure(config =>
     config.AddBranch("jobs", jobs =>
     {
         jobs.SetDescription("List and manage jobs.");
-        jobs.AddCommand<JobsListCommand>("list").WithAlias("ls").WithDescription("List jobs.");
+        jobs.AddCommand<JobsListCommand>("list").WithAlias("ls").WithDescription("List jobs (includes job id for use with rules and other commands).");
         jobs.AddCommand<JobGetCommand>("get").WithDescription("Show a job's full definition.");
         jobs.AddCommand<JobCreateCommand>("create").WithDescription("Create a single job from flags.");
         jobs.AddCommand<JobLogsCommand>("logs").WithDescription("Show recent executions of an HTTP job.");
@@ -129,9 +136,17 @@ app.Configure(config =>
     config.AddBranch("rules", rules =>
     {
         rules.SetDescription("Manage per-job alert rules.");
-        rules.AddCommand<RulesListCommand>("list").WithAlias("ls").WithDescription("List a job's alert rules.");
+        rules.AddCommand<RulesListCommand>("list")
+            .WithAlias("ls")
+            .WithDescription("List a job's alert rules with channel kind and target.")
+            .WithExample("rules", "list", "nightly-db-backup")
+            .WithExample("rules", "ls", "018f1234-abcd-7000-8000-000000000001");
         rules.AddCommand<RuleAddCommand>("add").WithDescription("Add an alert rule to a job.");
         rules.AddCommand<RuleDeleteCommand>("delete").WithAlias("rm").WithDescription("Delete an alert rule.");
+        rules.AddCommand<RulesTestCommand>("test")
+            .WithDescription("Send a test notification on every channel configured for a job.")
+            .WithExample("rules", "test", "nightly-db-backup")
+            .WithExample("rules", "test", "018f1234-abcd-7000-8000-000000000001");
     });
 
     config.AddBranch("config", cfg =>

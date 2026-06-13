@@ -6,6 +6,20 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-13
+
+### Added
+- `steadycron report [--hours N] [--verbose]` — account-wide activity digest for a rolling time
+  window (default 24 h). Shows execution counts, per-job failure detail (HTTP status, error, retry
+  count, response body in `--verbose`), alert delivery status, and a "silent jobs" list for
+  schedules that fired zero times in the window. Exits non-zero when any failure or undelivered
+  alert is detected, enabling scripted alerting. Backed by the new `/api/reports/summary` endpoint.
+- New server-side API endpoints: `GET /api/reports/summary` and `GET /api/reports/events`.
+  Both accept `from`/`to` timestamps (any `DateTime.Parse`-compatible format), `types`
+  (executions/pings/alerts), `job_id`, `kind`, `status`, and repeatable `tag` filters.
+  The events endpoint is cursor-paginated (max 500 per page). Maximum query window is plan-gated:
+  Free 1 day · Developer 7 days · Team 30 days.
+
 ## [1.4.0] - 2026-06-07
 
 ### Added
@@ -93,7 +107,8 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/steadycron/cli/compare/v1.4.0...v1.6.0
 [1.4.0]: https://github.com/steadycron/cli/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/steadycron/cli/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/steadycron/cli/compare/v1.2.1...v1.2.2

@@ -6,6 +6,11 @@ namespace SteadyCron.Cli.Output;
 /// <summary>Shared formatting for jobs and executions (status colors, schedule/relative-time text).</summary>
 public static class JobFormatting
 {
+    public const string UnverifiedEmailPauseReason = "unverified_email";
+
+    public const string UnverifiedEmailWarning =
+        "This job is paused because your email address is not yet verified. " +
+        "Check your inbox and click the verification link — the job will activate automatically once verified.";
     public static string StatusMarkup(string? status)
     {
         var s = status ?? "new";
