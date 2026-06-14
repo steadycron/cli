@@ -68,7 +68,9 @@ app.Configure(config =>
         .WithExample("apply", "production.yaml", "-n", "prod", "--env-file", "secrets.env");
 
     config.AddCommand<ExportCommand>("export")
-        .WithDescription("Export your account (or a subset) as a v2 manifest.")
+        .WithDescription("Export your account (or a subset) as a v2 manifest or Terraform HCL.")
+        .WithExample("export", "--format", "terraform", "-o", "main.tf")
+        .WithExample("export", "--format", "terraform", "--scope", "job", "weekly-digest-email", "-o", "job.tf")
         .WithExample("export", "-o", "steadycron.yaml")
         .WithExample("export", "-o", "steadycron.yaml", "--write-env", "secrets.env")
         .WithExample("export", "--scope", "jobs")

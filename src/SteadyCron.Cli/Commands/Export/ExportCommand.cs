@@ -24,7 +24,7 @@ public sealed class ExportSettings : CliSettings
     public string? OutputFile { get; set; }
 
     [CommandOption("--format")]
-    [Description("Output format: 'yaml' (default) or 'json'.")]
+    [Description("Output format: 'yaml' (default), 'json', or 'terraform'.")]
     public string? Format { get; set; }
 
     [CommandOption("--namespace|-n")]
@@ -59,74 +59,127 @@ public sealed class ExportCommand : SteadyCronCommandBase<ExportSettings>
         ExportSettings settings, OutputContext output, CancellationToken ct)
     {
         var client = CreateClient(settings);
+        var isTerraform = string.Equals(settings.Format, "terraform", StringComparison.OrdinalIgnoreCase);
         string manifestText;
 
-        switch (settings.EffectiveScope)
+        if (isTerraform)
         {
-            case "account":
-                manifestText = await client.ExportAccountAsync(settings.Format, settings.Namespace, ct);
-                break;
-
-            case "jobs":
-                manifestText = await client.ExportJobsAsync(settings.Format, settings.Namespace, ct);
-                break;
-
-            case "job":
+            switch (settings.EffectiveScope)
             {
-                if (string.IsNullOrWhiteSpace(settings.Target))
+                case "account":
+                    manifestText = await client.ExportAccountTerraformAsync(ct);
+                    break;
+
+                case "job":
                 {
-                    output.Error("--scope job requires a job name or id as the argument.");
+                    if (string.IsNullOrWhiteSpace(settings.Target))
+                    {
+                        output.Error("--scope job requires a job name or id as the argument.");
+                        return ExitCodes.Error;
+                    }
+
+                    var job = await JobLookup.ResolveAsync(client, settings.Target, ct);
+                    manifestText = await client.ExportJobTerraformAsync(job.Id, ct);
+                    break;
+                }
+
+                default:
+                    output.Error("--format terraform supports --scope account (default) or --scope job <name/id>.");
+                    return ExitCodes.Error;
+            }
+
+            // Terraform sensitive variables are declared inline as `variable "..." { sensitive = true }`.
+            // Remind the user to supply values via tfvars or -var flags.
+            var sensitiveVars = CountSensitiveVars(manifestText);
+            if (sensitiveVars > 0)
+            {
+                output.Warn($"The exported configuration declares {sensitiveVars} sensitive variable(s).");
+                output.Warn("Supply them via a terraform.tfvars file or -var flags when applying:");
+                output.Warn("  terraform apply -var='sc_channel_ops_slack_webhook_url=https://...'");
+            }
+        }
+        else
+        {
+            switch (settings.EffectiveScope)
+            {
+                case "account":
+                    manifestText = await client.ExportAccountAsync(settings.Format, settings.Namespace, ct);
+                    break;
+
+                case "jobs":
+                    manifestText = await client.ExportJobsAsync(settings.Format, settings.Namespace, ct);
+                    break;
+
+                case "job":
+                {
+                    if (string.IsNullOrWhiteSpace(settings.Target))
+                    {
+                        output.Error("--scope job requires a job name or id as the argument.");
+                        return ExitCodes.Error;
+                    }
+
+                    var job = await JobLookup.ResolveAsync(client, settings.Target, ct);
+                    manifestText = await client.ExportJobAsync(job.Id, settings.Format, settings.Namespace, ct);
+                    break;
+                }
+
+                default:
+                    output.Error($"Unknown --scope '{settings.Scope}'. Valid values: account, jobs, job.");
+                    return ExitCodes.Error;
+            }
+
+            // Report required-env placeholders to stderr so stdout (the manifest body) stays clean
+            var placeholders = EnvInterpolator.FindPlaceholders(manifestText);
+            if (placeholders.Count > 0)
+            {
+                output.Warn($"The exported manifest references {placeholders.Count} environment variable(s):");
+                foreach (var name in placeholders)
+                {
+                    output.Warn($"  ${{{name}}}");
+                }
+            }
+
+            // Optional .env scaffold for the secret placeholders.
+            if (!string.IsNullOrWhiteSpace(settings.WriteEnv))
+            {
+                if (File.Exists(settings.WriteEnv))
+                {
+                    output.Error(
+                        $"Refusing to overwrite existing env file '{settings.WriteEnv}' " +
+                        "(it may already hold secrets). Remove it or choose another path.");
                     return ExitCodes.Error;
                 }
 
-                var job = await JobLookup.ResolveAsync(client, settings.Target, ct);
-                manifestText = await client.ExportJobAsync(job.Id, settings.Format, settings.Namespace, ct);
-                break;
-            }
-
-            default:
-                output.Error($"Unknown --scope '{settings.Scope}'. Valid values: account, jobs, job.");
-                return ExitCodes.Error;
-        }
-
-        // Report required-env placeholders to stderr so stdout (the manifest body) stays clean
-        var placeholders = EnvInterpolator.FindPlaceholders(manifestText);
-        if (placeholders.Count > 0)
-        {
-            output.Warn($"The exported manifest references {placeholders.Count} environment variable(s):");
-            foreach (var name in placeholders)
-            {
-                output.Warn($"  ${{{name}}}");
+                await File.WriteAllTextAsync(settings.WriteEnv, BuildEnvScaffold(placeholders), ct);
+                output.Success($"Env scaffold written to {settings.WriteEnv} ({placeholders.Count} variable(s)).");
             }
         }
 
-        // Write manifest to file or stdout
+        // Write to file or stdout (common to all formats)
         if (!string.IsNullOrWhiteSpace(settings.OutputFile))
         {
             await File.WriteAllTextAsync(settings.OutputFile, manifestText, ct);
-            output.Success($"Manifest written to {settings.OutputFile}");
+            output.Success($"Written to {settings.OutputFile}");
         }
         else
         {
             Console.Write(manifestText);
         }
 
-        // Optional .env scaffold for the secret placeholders.
-        if (!string.IsNullOrWhiteSpace(settings.WriteEnv))
-        {
-            if (File.Exists(settings.WriteEnv))
-            {
-                output.Error(
-                    $"Refusing to overwrite existing env file '{settings.WriteEnv}' " +
-                    "(it may already hold secrets). Remove it or choose another path.");
-                return ExitCodes.Error;
-            }
-
-            await File.WriteAllTextAsync(settings.WriteEnv, BuildEnvScaffold(placeholders), ct);
-            output.Success($"Env scaffold written to {settings.WriteEnv} ({placeholders.Count} variable(s)).");
-        }
-
         return ExitCodes.Ok;
+    }
+
+    private static int CountSensitiveVars(string hcl)
+    {
+        var count = 0;
+        var search = "sensitive = true";
+        var idx = 0;
+        while ((idx = hcl.IndexOf(search, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += search.Length;
+        }
+        return count;
     }
 
     private static string BuildEnvScaffold(IReadOnlyList<string> names)

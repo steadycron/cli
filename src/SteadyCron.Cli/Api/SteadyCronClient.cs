@@ -137,6 +137,14 @@ public sealed class SteadyCronClient
         return GetStringAsync(query, ct);
     }
 
+    /// <summary>Exports the whole account as a Terraform HCL file with import blocks.</summary>
+    public Task<string> ExportAccountTerraformAsync(CancellationToken ct = default) =>
+        GetStringAsync("api/export/terraform", ct);
+
+    /// <summary>Exports a single job as a Terraform HCL file with import block.</summary>
+    public Task<string> ExportJobTerraformAsync(Guid id, CancellationToken ct = default) =>
+        GetStringAsync($"api/jobs/{id}/export/terraform", ct);
+
     // ── Cron ──────────────────────────────────────────────────────────────────────
 
     public Task<CronPreviewResponse> PreviewCronAsync(CronPreviewRequest request, CancellationToken ct = default) =>
