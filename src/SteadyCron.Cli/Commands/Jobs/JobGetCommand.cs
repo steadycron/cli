@@ -33,6 +33,7 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
             grid.AddRow($"[grey]{key}[/]", Markup.Escape(value ?? "—"));
 
         Row("id", job.Id.ToString());
+        Row("job_key", job.JobKey);
         Row("name", job.Name);
         Row("kind", job.Kind);
         grid.AddRow("[grey]status[/]", JobFormatting.StatusMarkup(job.Status));

@@ -59,10 +59,10 @@ public sealed class ImportVercelTests
         Assert.Equal("https://app.example.com/api/trigger", result.Jobs[0].Url);
     }
 
-    // ── manifest_key from path ─────────────────────────────────────────────────────
+    // ── job_key from path ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void Manifest_key_is_slug_of_path()
+    public void Job_key_is_slug_of_path()
     {
         const string json = """{"crons":[{"path":"/api/weekly-report","schedule":"0 * * * *"}]}""";
 

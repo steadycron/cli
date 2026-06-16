@@ -37,6 +37,7 @@ public sealed record CreateJobRequest
     public int? MaxRunDurationSeconds { get; init; }
 
     public ExecutionStatus? Status { get; init; }
+    public string? JobKey { get; init; }
 }
 
 /// <summary>
@@ -64,6 +65,7 @@ public sealed record UpdateJobRequest
     public int[]? RetryOnStatusCodes { get; init; }
     public bool? SkipIfRunning { get; init; }
     public MisfirePolicy? MisfirePolicy { get; init; }
+    public string? JobKey { get; init; }
 }
 
 /// <summary>The three ping URLs returned for heartbeat jobs.</summary>
@@ -108,6 +110,7 @@ public sealed record JobResponse
     public string? BadgeUrl { get; init; }
     public string? SigningSecret { get; init; }
     public string? PausedReason { get; init; }
+    public string? JobKey { get; init; }
 }
 
 public sealed record JobListResponse(

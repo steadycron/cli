@@ -14,6 +14,9 @@ public sealed record DesiredJob
     /// <summary><c>http</c> or <c>heartbeat</c>.</summary>
     public required string Kind { get; init; }
 
+    /// <summary>Stable unique key for this job; maps to <c>job_key</c> on the API. Null = auto-generated from name.</summary>
+    public string? JobKey { get; init; }
+
     /// <summary>Normalized: null when empty.</summary>
     public string? Description { get; init; }
 

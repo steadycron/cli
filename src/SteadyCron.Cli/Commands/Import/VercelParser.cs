@@ -66,7 +66,7 @@ internal static class VercelParser
         {
             var path = cron.Path.StartsWith('/') ? cron.Path : "/" + cron.Path;
             var url = normalizedBase + path;
-            var id = ManifestKeyGenerator.ToSlug(path.TrimStart('/'));
+            var id = JobKeyGenerator.ToSlug(path.TrimStart('/'));
             id = DeduplicateId(id, jobs);
 
             jobs.Add(new ManifestJob
@@ -153,6 +153,6 @@ internal static class VercelParser
             }
         }
 
-        return id + "-" + ManifestKeyGenerator.FromLine(id);
+        return id + "-" + JobKeyGenerator.FromLine(id);
     }
 }

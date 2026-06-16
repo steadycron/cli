@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 namespace SteadyCron.Cli.Manifest;
 
 /// <summary>
-/// Generates stable manifest <c>id</c> values for imported resources.
+/// Generates stable <c>job_key</c> values for imported resources.
 /// A slug is preferred when a display name is available; a hash is used as a fallback.
 /// </summary>
-public static class ManifestKeyGenerator
+public static class JobKeyGenerator
 {
     private static readonly Regex NonAlphanumeric =
         new(@"[^a-z0-9]+", RegexOptions.Compiled);

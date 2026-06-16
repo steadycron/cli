@@ -67,7 +67,7 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
         table.AddColumn("Schedule");
         table.AddColumn("Next run");
         table.AddColumn("Last run");
-        table.AddColumn(new TableColumn("Id").NoWrap());
+        table.AddColumn(new TableColumn("Job key").NoWrap());
 
         foreach (var job in items)
         {
@@ -78,7 +78,7 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
                 Markup.Escape(JobFormatting.ScheduleWithTz(job)),
                 Markup.Escape(job.Kind == "http" ? JobFormatting.When(job.NextFireAt) : "—"),
                 Markup.Escape(JobFormatting.When(job.LastFireAt)),
-                $"[grey]{job.Id}[/]");
+                $"[grey]{Markup.Escape(job.JobKey ?? "—")}[/]");
         }
 
         output.Render(table);

@@ -14,6 +14,10 @@ public sealed class JobCreateSettings : CliSettings
     [Description("Job name (unique within the account).")]
     public string? Name { get; set; }
 
+    [CommandOption("--job-key <KEY>")]
+    [Description("Stable unique identifier for this job (lowercase letters, digits, hyphens, underscores). Auto-generated from name if omitted.")]
+    public string? JobKey { get; set; }
+
     [CommandOption("--kind <KIND>")]
     [Description("http (default) or heartbeat.")]
     public string? Kind { get; set; }
@@ -153,6 +157,7 @@ public sealed class JobCreateCommand : SteadyCronCommandBase<JobCreateSettings>
         var job = new ManifestJob
         {
             Name = s.Name,
+            Id = s.JobKey,
             Kind = s.Kind,
             Description = s.Description,
             Schedule = s.Schedule,

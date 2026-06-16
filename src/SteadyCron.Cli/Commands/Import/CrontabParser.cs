@@ -112,8 +112,8 @@ internal static class CrontabParser
                 : null;
 
             var id = name is not null
-                ? ManifestKeyGenerator.ToSlug(name)
-                : ManifestKeyGenerator.FromLine(rawLine.Trim());
+                ? JobKeyGenerator.ToSlug(name)
+                : JobKeyGenerator.FromLine(rawLine.Trim());
 
             // Ensure id uniqueness within this parse (append suffix when clash occurs)
             id = DeduplicateId(id, jobs);
@@ -441,7 +441,7 @@ internal static class CrontabParser
             }
         }
 
-        return id + "-" + ManifestKeyGenerator.FromLine(id);
+        return id + "-" + JobKeyGenerator.FromLine(id);
     }
 
     // ── Shell tokenizer ───────────────────────────────────────────────────────────

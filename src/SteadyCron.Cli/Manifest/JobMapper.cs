@@ -63,6 +63,7 @@ public sealed class JobMapper
             {
                 Name = name,
                 Kind = kind,
+                JobKey = string.IsNullOrWhiteSpace(job.Id) ? null : job.Id.Trim(),
                 Description = description,
                 ScheduleKind = scheduleKind,
                 CronExpression = cron,
@@ -106,6 +107,7 @@ public sealed class JobMapper
         {
             Name = name,
             Kind = kind,
+            JobKey = string.IsNullOrWhiteSpace(job.Id) ? null : job.Id.Trim(),
             Description = description,
             ScheduleKind = scheduleKind,
             CronExpression = cron,
@@ -140,6 +142,7 @@ public sealed class JobMapper
             {
                 Name = d.Name,
                 Kind = "heartbeat",
+                JobKey = d.JobKey,
                 Description = d.Description,
                 ScheduleKind = d.ScheduleKind,
                 CronExpression = d.CronExpression,
@@ -156,6 +159,7 @@ public sealed class JobMapper
         {
             Name = d.Name,
             Kind = "http",
+            JobKey = d.JobKey,
             Description = d.Description,
             ScheduleKind = d.ScheduleKind,
             CronExpression = d.CronExpression,
