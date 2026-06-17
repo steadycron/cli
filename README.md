@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/steadycron/cli/blob/main/LICENSE)
 
 The official command-line interface for [SteadyCron](https://steadycron.com) — schedule, run, and
-monitor cron jobs as code. Declare your entire account — jobs, alert channels, tags, variables —
-in a YAML manifest, commit it to your repo, and reconcile with a single command:
+monitor cron jobs as code. Declare your entire account — jobs, heartbeat monitors, alert channels,
+tags, variables — in a YAML manifest, commit it to your repo, and reconcile with a single command:
 
 ```bash
 steadycron sync steadycron.yaml --namespace prod
@@ -61,8 +61,9 @@ steadycron config show --check   # verify connectivity
 
 ## The v2 manifest
 
-A manifest declares your whole account: channels, tags, variables, and jobs. The server reconciles
-from this single source of truth.
+A manifest declares your whole account as code: channels, tags, variables, jobs, and heartbeat
+monitors. The server reconciles from this single source of truth — every schedule, alert rule,
+and monitoring configuration is version-controlled and reviewable in a pull request.
 
 ```yaml
 # examples/steadycron.yaml
@@ -370,7 +371,7 @@ steadycron apply steadycron.yaml --env-file secrets.env --namespace prod
 After migrating, you can tighten schedules and set per-job timezones — capabilities Vercel doesn't
 expose.
 
-## Cron as Code in CI
+## Cron and monitoring as code in CI
 
 Add the SteadyCron GitHub Action to plan on pull requests and apply on merge:
 
