@@ -39,8 +39,15 @@ public sealed class OutputContext
     /// <summary>Diagnostics console (stderr).</summary>
     public IAnsiConsole Err { get; }
 
-    /// <summary>Writes a JSON document to stdout verbatim (no markup interpretation). Always emitted.</summary>
-    public void WriteJson<T>(T value) => Out.WriteLine(OutputJson.Serialize(value));
+    /// <summary>
+    /// Writes a JSON document to stdout verbatim (no markup interpretation). Always emitted.
+    /// Bypasses <see cref="Out"/>/Spectre.Console entirely: <c>IAnsiConsole.WriteLine</c> renders
+    /// plain text through the same word-wrapping pipeline as markup, so a long unbroken string
+    /// (a URL, an error message, ...) gets a literal newline inserted at the console width —
+    /// silently producing invalid JSON. Writing straight to <see cref="Console.Out"/> sends the
+    /// same bytes to the same stream without going through that renderer.
+    /// </summary>
+    public void WriteJson<T>(T value) => Console.Out.WriteLine(OutputJson.Serialize(value));
 
     /// <summary>
     /// Writes a plain line of primary output to stdout. Suppressed only in <c>--json</c> mode

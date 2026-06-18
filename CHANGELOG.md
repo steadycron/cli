@@ -6,6 +6,17 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-06-18
+
+### Fixed
+- `--json` output (`jobs get`, `jobs list`, `plan --output json`, `apply`, every `--json`
+  command) could emit invalid JSON: `OutputContext.WriteJson` wrote through
+  `IAnsiConsole.WriteLine`, which renders plain text through Spectre.Console's word-wrap
+  pipeline — the same one used for human-readable markup. A long unbroken string with no
+  whitespace (a URL, a token) got a literal newline inserted at the detected console width,
+  corrupting the JSON wherever that string landed. `--json` output is now written straight
+  to `Console.Out`, bypassing Spectre entirely.
+
 ## [1.8.2] - 2026-06-18
 
 ### Fixed
