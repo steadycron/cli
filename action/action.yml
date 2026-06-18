@@ -1,5 +1,10 @@
+# This file is the single source of truth for steadycron/action — release.yml's
+# mirror-action job overwrites action.yml in that repo on every tagged release. If you
+# change behavior directly in steadycron/action, port it back here first, or the next
+# release will silently revert it (this happened once: the Terraform tool support was
+# added only in steadycron/action and got wiped out by the v1.8.1 release).
 name: SteadyCron
-description: 'Plan or apply a SteadyCron manifest. Plan diffs on pull requests, apply on merge — GitOps for cron.'
+description: 'SteadyCron IaC — plan/apply via YAML manifest or Terraform. Plan diffs on pull requests, apply on merge.'
 
 author: SteadyCron
 
@@ -8,16 +13,20 @@ branding:
   color: blue
 
 inputs:
+  tool:
+    description: '"yaml" (default) or "terraform"'
+    required: false
+    default: yaml
   command:
     description: 'plan, apply, validate, or sync'
     required: false
     default: plan
   manifest:
-    description: 'Path to the manifest file or directory'
+    description: 'Path to the manifest file or directory (yaml tool only)'
     required: false
     default: .
   prune:
-    description: 'If true, pass --prune to apply/sync (delete server resources not in the manifest)'
+    description: 'If true, pass --prune to apply/sync (delete server resources not in the manifest; yaml tool only)'
     required: false
     default: "false"
   comment-on-pr:
@@ -25,34 +34,54 @@ inputs:
     required: false
     default: "false"
   namespace:
-    description: 'Account namespace. Required when using --prune across multiple namespaces.'
+    description: 'Account namespace. Required when using --prune across multiple namespaces (yaml tool only).'
     required: false
     default: ""
   cli-version:
-    description: 'CLI version to install (e.g. "1.3.0"). Defaults to latest.'
+    description: 'CLI version to install (e.g. "1.3.0"). Defaults to latest. (yaml tool only)'
     required: false
     default: latest
   env-file:
     description: >
       Path to a .env file supplying the manifest's ${...} secret values. When empty,
       secrets are sourced from the workflow environment via --allow-process-env — pass
-      them as env vars on the step in the usual GitHub Actions way.
+      them as env vars on the step in the usual GitHub Actions way. (yaml tool only)
+    required: false
+    default: ""
+  terraform-version:
+    description: 'Terraform version to install (e.g. "1.8.0"). Defaults to latest. (terraform tool only)'
+    required: false
+    default: latest
+  working-directory:
+    description: 'Directory containing .tf files. (terraform tool only)'
+    required: false
+    default: .
+  backend-config:
+    description: 'Value(s) passed to terraform init -backend-config=... Repeat the input with newlines for multiple values. (terraform tool only)'
+    required: false
+    default: ""
+  var-file:
+    description: 'Path to a .tfvars file passed to terraform plan/apply. (terraform tool only)'
     required: false
     default: ""
 
 outputs:
   plan-json:
-    description: The raw server plan JSON from `steadycron plan --output json` (set when command is "plan")
-    value: ${{ steps.plan.outputs.plan_json }}
+    description: Raw plan JSON — from `steadycron plan --output json` (yaml tool) or `terraform show -json` (terraform tool). Set when command is "plan".
+    value: ${{ steps.plan.outputs.plan_json || steps.tf-plan.outputs.plan_json }}
+  plan-output:
+    description: Human-readable plan text (terraform tool only, set when command is "plan")
+    value: ${{ steps.tf-plan.outputs.plan_output }}
   has-drift:
     description: '"true" when the plan detected changes'
-    value: ${{ steps.plan.outputs.has_drift }}
+    value: ${{ steps.plan.outputs.has_drift || steps.tf-plan.outputs.has_drift }}
 
 runs:
   using: composite
   steps:
     # ── Install CLI ────────────────────────────────────────────────────────────────
     - name: Install SteadyCron CLI
+      if: inputs.tool == 'yaml'
       shell: bash
       env:
         CLI_VERSION: ${{ inputs.cli-version }}
@@ -88,7 +117,7 @@ runs:
 
     # ── Validate ──────────────────────────────────────────────────────────────────
     - name: Validate
-      if: inputs.command == 'validate'
+      if: inputs.tool == 'yaml' && inputs.command == 'validate'
       shell: bash
       env:
         MANIFEST: ${{ inputs.manifest }}
@@ -102,7 +131,7 @@ runs:
     # ── Plan ──────────────────────────────────────────────────────────────────────
     - name: Plan
       id: plan
-      if: inputs.command == 'plan'
+      if: inputs.tool == 'yaml' && inputs.command == 'plan'
       shell: bash
       env:
         MANIFEST: ${{ inputs.manifest }}
@@ -137,7 +166,7 @@ runs:
 
     # ── Post PR comment ──────────────────────────────────────────────────────────
     - name: Post plan as PR comment
-      if: inputs.command == 'plan' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      if: inputs.tool == 'yaml' && inputs.command == 'plan' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -198,7 +227,7 @@ runs:
 
     # ── Fail check if plan has errors ────────────────────────────────────────────
     - name: Fail on plan errors
-      if: inputs.command == 'plan'
+      if: inputs.tool == 'yaml' && inputs.command == 'plan'
       shell: bash
       env:
         PLAN_JSON: ${{ steps.plan.outputs.plan_json }}
@@ -212,7 +241,7 @@ runs:
 
     # ── Apply ─────────────────────────────────────────────────────────────────────
     - name: Apply
-      if: inputs.command == 'apply'
+      if: inputs.tool == 'yaml' && inputs.command == 'apply'
       shell: bash
       env:
         MANIFEST: ${{ inputs.manifest }}
@@ -231,7 +260,7 @@ runs:
 
     # ── Sync ──────────────────────────────────────────────────────────────────────
     - name: Sync
-      if: inputs.command == 'sync'
+      if: inputs.tool == 'yaml' && inputs.command == 'sync'
       shell: bash
       env:
         MANIFEST: ${{ inputs.manifest }}
@@ -247,3 +276,172 @@ runs:
         if [ -n "$ENV_FILE" ]; then ARGS+=(--env-file "$ENV_FILE"); else ARGS+=(--allow-process-env); fi
 
         steadycron sync "${ARGS[@]}"
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # TERRAFORM TOOL
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ── Install Terraform ─────────────────────────────────────────────────────
+    - name: Install Terraform
+      if: inputs.tool == 'terraform'
+      shell: bash
+      env:
+        TF_VERSION: ${{ inputs.terraform-version }}
+      run: |
+        set -euo pipefail
+        if [ "$TF_VERSION" = "latest" ]; then
+          TF_VERSION=$(curl -sf https://api.releases.hashicorp.com/v1/releases/terraform/latest \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+        fi
+
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)        ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+
+        URL="https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_${OS}_${ARCH}.zip"
+        echo "Installing Terraform v${TF_VERSION} (${OS}/${ARCH})…"
+        curl -sfL -o /tmp/terraform.zip "$URL"
+        unzip -q -o /tmp/terraform.zip -d /usr/local/bin
+        rm /tmp/terraform.zip
+        terraform version
+
+    # ── Terraform init ────────────────────────────────────────────────────────
+    - name: Terraform init
+      if: inputs.tool == 'terraform'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BACKEND_CONFIG: ${{ inputs.backend-config }}
+      run: |
+        set -euo pipefail
+        ARGS=(-input=false)
+        if [ -n "$BACKEND_CONFIG" ]; then
+          while IFS= read -r line; do
+            [ -n "$line" ] && ARGS+=(-backend-config="$line")
+          done <<< "$BACKEND_CONFIG"
+        fi
+        terraform init "${ARGS[@]}"
+
+    # ── Terraform plan ────────────────────────────────────────────────────────
+    - name: Terraform plan
+      id: tf-plan
+      if: inputs.tool == 'terraform' && inputs.command == 'plan'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VAR_FILE: ${{ inputs.var-file }}
+      run: |
+        set -euo pipefail
+        ARGS=(-input=false -out=tfplan -detailed-exitcode)
+        [ -n "$VAR_FILE" ] && ARGS+=(-var-file="$VAR_FILE")
+
+        terraform plan "${ARGS[@]}" > /tmp/tf-plan-output.txt 2>&1 && EXIT=$? || EXIT=$?
+        cat /tmp/tf-plan-output.txt
+
+        # exit 2 = changes present (not an error)
+        if [ $EXIT -eq 2 ]; then
+          echo "has_drift=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_drift=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Capture human-readable output
+        echo "plan_output<<EOF" >> "$GITHUB_OUTPUT"
+        cat /tmp/tf-plan-output.txt >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+        # Capture JSON output
+        if [ -f tfplan ]; then
+          PLAN_JSON=$(terraform show -json tfplan)
+          echo "plan_json<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PLAN_JSON" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Propagate real errors but treat changes (exit 2) as success
+        if [ $EXIT -ne 0 ] && [ $EXIT -ne 2 ]; then
+          exit $EXIT
+        fi
+
+    # ── Post Terraform plan as PR comment ─────────────────────────────────────
+    - name: Post Terraform plan as PR comment
+      if: inputs.tool == 'terraform' && inputs.command == 'plan' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PLAN_OUTPUT: ${{ steps.tf-plan.outputs.plan_output }}
+        PLAN_JSON: ${{ steps.tf-plan.outputs.plan_json }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+
+        MARKER="<!-- steadycron-terraform-plan-comment -->"
+
+        # Parse resource change counts from the JSON plan
+        ADDS=$(echo    "$PLAN_JSON" | python3 -c "import sys,json; c=json.load(sys.stdin).get('resource_changes',[]); print(sum(1 for r in c if 'create' in r.get('change',{}).get('actions',[])))")
+        CHANGES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; c=json.load(sys.stdin).get('resource_changes',[]); print(sum(1 for r in c if 'update' in r.get('change',{}).get('actions',[])))")
+        DESTROYS=$(echo "$PLAN_JSON" | python3 -c "import sys,json; c=json.load(sys.stdin).get('resource_changes',[]); print(sum(1 for r in c if 'delete' in r.get('change',{}).get('actions',[])))")
+
+        if [ "$ADDS" -eq 0 ] && [ "$CHANGES" -eq 0 ] && [ "$DESTROYS" -eq 0 ]; then
+          STATUS="✅ No changes. Infrastructure is up-to-date."
+        else
+          STATUS="📋 **${ADDS} to add · ${CHANGES} to change · ${DESTROYS} to destroy**"
+        fi
+
+        BODY_FILE=$(mktemp)
+        cat > "$BODY_FILE" <<MARKDOWN
+        ${MARKER}
+        ## SteadyCron Terraform Plan — \`${SHA:0:7}\`
+
+        ${STATUS}
+
+        <details>
+        <summary>Plan output</summary>
+
+        \`\`\`
+        ${PLAN_OUTPUT}
+        \`\`\`
+
+        </details>
+
+        > Triggered by commit \`${SHA:0:7}\`. Re-run the workflow to refresh.
+        MARKDOWN
+
+        EXISTING_ID=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+          --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+        if [ -n "$EXISTING_ID" ]; then
+          gh api "repos/${REPO}/issues/comments/${EXISTING_ID}" \
+            -X PATCH -F "body=@${BODY_FILE}" > /dev/null
+          echo "Updated existing Terraform plan comment #${EXISTING_ID}"
+        else
+          gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            -F "body=@${BODY_FILE}" > /dev/null
+          echo "Posted new Terraform plan comment"
+        fi
+        rm "$BODY_FILE"
+
+    # ── Terraform apply ───────────────────────────────────────────────────────
+    - name: Terraform apply
+      if: inputs.tool == 'terraform' && inputs.command == 'apply'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VAR_FILE: ${{ inputs.var-file }}
+      run: |
+        set -euo pipefail
+        # Use the saved plan file if present (produced by a prior plan step in the same job),
+        # otherwise run a fresh plan+apply in a single step.
+        if [ -f tfplan ]; then
+          terraform apply -input=false tfplan
+        else
+          ARGS=(-input=false -auto-approve)
+          [ -n "$VAR_FILE" ] && ARGS+=(-var-file="$VAR_FILE")
+          terraform apply "${ARGS[@]}"
+        fi

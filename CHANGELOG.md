@@ -6,6 +6,17 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-06-18
+
+### Fixed
+- The v1.8.1 release regressed `steadycron/action` (and the floating `@v1` tag): the
+  `action/action.yml` mirrored from this repo was stale and only supported `tool: yaml`,
+  silently wiping out the Terraform tool support (`tool: terraform`, `working-directory`,
+  `terraform-version`, `backend-config`, `var-file`) that had been added directly in
+  `steadycron/action` and never backported here. `action/action.yml` now matches the
+  Terraform-capable version and carries a guardrail comment so future direct edits to
+  `steadycron/action` get backported before the next release.
+
 ## [1.8.1] - 2026-06-18
 
 ### Fixed
