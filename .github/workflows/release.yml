@@ -144,3 +144,15 @@ jobs:
           MAJOR_TAG=$(echo "${TAG}" | grep -oP '^v\d+')
           git tag -f "${MAJOR_TAG}"
           git push --force origin "${MAJOR_TAG}"
+
+      - name: Create GitHub Release in steadycron/action
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" --repo steadycron/action >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists in steadycron/action — skipping"
+          else
+            gh release create "${TAG}" --repo steadycron/action --title "${TAG}" --generate-notes
+          fi
