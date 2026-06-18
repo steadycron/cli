@@ -6,6 +6,21 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-06-18
+
+### Fixed
+- `action/action.yml`'s Plan step only ever wrote `PLAN_JSON` to `$GITHUB_OUTPUT`. When
+  `steadycron plan` exits 5 (real plan errors, not drift), that step failed the job
+  immediately with zero diagnostics — the later "Fail on plan errors" step, which prints a
+  readable message, never got a chance to run. Now echoes the plan JSON via `::error::`
+  before exiting on a real failure. Also fixed the PR-comment script's summary counts,
+  which read `creates`/`updates`/`deletes` as top-level lists that the API has never
+  returned (the real shape is `summary.{create,update,delete}` counts) — CREATES/UPDATES/
+  DELETES in the posted PR comment were always 0 regardless of the actual plan.
+  This was already hotfixed directly in `steadycron/action` (and the floating `v1` tag
+  moved) so it takes effect immediately; this release just keeps the source of truth in
+  sync for the next mirror.
+
 ## [1.8.3] - 2026-06-18
 
 ### Fixed

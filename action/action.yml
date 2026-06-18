@@ -159,8 +159,14 @@ runs:
           echo "has_drift=false" >> "$GITHUB_OUTPUT"
         fi
 
-        # Propagate real errors (exit 5) but treat drift (exit 2) as success for this step
+        # Propagate real errors (exit 5) but treat drift (exit 2) as success for this step.
+        # Print the plan JSON now — it's only otherwise captured into $GITHUB_OUTPUT, so a real
+        # error here would otherwise abort the job with a bare exit code and zero diagnostics
+        # (the later "Fail on plan errors" step, which prints a readable message, never runs
+        # because this step already failed the job).
         if [ $EXIT -ne 0 ] && [ $EXIT -ne 2 ]; then
+          echo "::error::steadycron plan failed (exit $EXIT). Plan output:"
+          echo "$PLAN_JSON"
           exit $EXIT
         fi
 
@@ -179,9 +185,9 @@ runs:
 
         MARKER="<!-- steadycron-plan-comment -->"
 
-        CREATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('creates',[])))")
-        UPDATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('updates',[])))")
-        DELETES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('deletes',[])))")
+        CREATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',{}).get('create',0))")
+        UPDATES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',{}).get('update',0))")
+        DELETES=$(echo "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',{}).get('delete',0))")
         ERRORS=$(echo  "$PLAN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('errors',[])))")
 
         if [ "$ERRORS" -gt 0 ]; then
