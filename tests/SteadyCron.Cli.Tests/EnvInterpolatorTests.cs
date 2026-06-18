@@ -112,4 +112,14 @@ public sealed class EnvInterpolatorTests
         var names = EnvInterpolator.FindRequiredPlaceholders("${A:-1} ${B:-2}");
         Assert.Empty(names);
     }
+
+    [Fact]
+    public void Multiple_defaulted_placeholders_each_resolve_independently()
+    {
+        // Regression: a defaulted placeholder must stop at its own '}' and not swallow
+        // forward through unrelated text (including a later {{template}} or ${...}) up to
+        // whatever '}' happens to appear next in the file.
+        var result = Apply("a: ${A:-1}\nb: ${B:-2}\nc: {{template}}\nd: ${D:-3}");
+        Assert.Equal("a: 1\nb: 2\nc: {{template}}\nd: 3", result);
+    }
 }

@@ -6,6 +6,16 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-06-18
+
+### Fixed
+- `${VAR:-default}` placeholders no longer corrupt the manifest when multiple defaulted
+  placeholders appear without an intervening `{{template_var}}`. The default-value regex
+  previously allowed a literal `}` as content whenever it wasn't immediately followed by
+  another `}`, so a placeholder's own closing brace could be swallowed and the match would
+  run on until the next `}}` pair anywhere later in the file — corrupting everything in
+  between. The default value now stops at the first `}` (shell-style semantics).
+
 ## [1.6.0] - 2026-06-13
 
 ### Added

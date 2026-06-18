@@ -15,8 +15,11 @@ namespace SteadyCron.Cli.Manifest;
 public static class EnvInterpolator
 {
     // Matches ${NAME} and ${NAME:-default}. NAME must start with a letter or underscore.
+    // The default value stops at the first '}' (shell-style semantics) — it must not contain
+    // a literal '}', so a placeholder can never swallow unrelated text (including a later
+    // ${...} or {{...}}) up to the next closing brace found anywhere downstream.
     private static readonly Regex PlaceholderRegex = new(
-        @"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-((?:[^}]|\}(?!\}))*))?}",
+        @"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?}",
         RegexOptions.Compiled);
 
     /// <summary>
