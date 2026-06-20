@@ -35,6 +35,8 @@ public sealed class JobMapper
         var (scheduleKind, cron, interval) = ResolveSchedule(job, label);
 
         var description = Empty(job.Description);
+        var runbookNotes = Empty(job.RunbookNotes);
+        var runbookUrl = Empty(job.RunbookUrl);
         var timezone = string.IsNullOrWhiteSpace(job.Timezone) ? JobDefaults.Timezone : job.Timezone.Trim();
         var paused = job.Paused ?? false;
 
@@ -65,6 +67,8 @@ public sealed class JobMapper
                 Kind = kind,
                 JobKey = string.IsNullOrWhiteSpace(job.Id) ? null : job.Id.Trim(),
                 Description = description,
+                RunbookNotes = runbookNotes,
+                RunbookUrl = runbookUrl,
                 ScheduleKind = scheduleKind,
                 CronExpression = cron,
                 IntervalSeconds = interval,
@@ -109,6 +113,8 @@ public sealed class JobMapper
             Kind = kind,
             JobKey = string.IsNullOrWhiteSpace(job.Id) ? null : job.Id.Trim(),
             Description = description,
+            RunbookNotes = runbookNotes,
+            RunbookUrl = runbookUrl,
             ScheduleKind = scheduleKind,
             CronExpression = cron,
             IntervalSeconds = interval,
@@ -144,6 +150,8 @@ public sealed class JobMapper
                 Kind = "heartbeat",
                 JobKey = d.JobKey,
                 Description = d.Description,
+                RunbookNotes = d.RunbookNotes,
+                RunbookUrl = d.RunbookUrl,
                 ScheduleKind = d.ScheduleKind,
                 CronExpression = d.CronExpression,
                 IntervalSeconds = d.IntervalSeconds,
@@ -161,6 +169,8 @@ public sealed class JobMapper
             Kind = "http",
             JobKey = d.JobKey,
             Description = d.Description,
+            RunbookNotes = d.RunbookNotes,
+            RunbookUrl = d.RunbookUrl,
             ScheduleKind = d.ScheduleKind,
             CronExpression = d.CronExpression,
             IntervalSeconds = d.IntervalSeconds,
@@ -195,6 +205,20 @@ public sealed class JobMapper
             changes.Add(new FieldChange("description", Display(server.Description), Display(d.Description)));
         }
 
+        string? newRunbookNotes = null;
+        if (!StringEquals(Empty(server.RunbookNotes), d.RunbookNotes))
+        {
+            newRunbookNotes = d.RunbookNotes ?? string.Empty; // "" clears it server-side
+            changes.Add(new FieldChange("runbook_notes", Display(server.RunbookNotes), Display(d.RunbookNotes)));
+        }
+
+        string? newRunbookUrl = null;
+        if (!StringEquals(Empty(server.RunbookUrl), d.RunbookUrl))
+        {
+            newRunbookUrl = d.RunbookUrl ?? string.Empty; // "" clears it server-side
+            changes.Add(new FieldChange("runbook_url", Display(server.RunbookUrl), Display(d.RunbookUrl)));
+        }
+
         // ── schedule ──
         string? newCron = null;
         int? newInterval = null;
@@ -225,6 +249,8 @@ public sealed class JobMapper
         var builder = new UpdateBuilder
         {
             Description = newDescription,
+            RunbookNotes = newRunbookNotes,
+            RunbookUrl = newRunbookUrl,
             CronExpression = newCron,
             IntervalSeconds = newInterval,
             Timezone = newTimezone,
@@ -538,6 +564,8 @@ public sealed class JobMapper
     private sealed class UpdateBuilder
     {
         public string? Description { get; set; }
+        public string? RunbookNotes { get; set; }
+        public string? RunbookUrl { get; set; }
         public string? CronExpression { get; set; }
         public int? IntervalSeconds { get; set; }
         public string? Timezone { get; set; }
@@ -560,6 +588,8 @@ public sealed class JobMapper
         public UpdateJobRequest Build() => new()
         {
             Description = Description,
+            RunbookNotes = RunbookNotes,
+            RunbookUrl = RunbookUrl,
             CronExpression = CronExpression,
             IntervalSeconds = IntervalSeconds,
             Timezone = Timezone,

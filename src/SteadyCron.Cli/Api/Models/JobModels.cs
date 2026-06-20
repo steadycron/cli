@@ -11,6 +11,8 @@ public sealed record CreateJobRequest
 {
     public required string Name { get; init; }
     public string? Description { get; init; }
+    public string? RunbookNotes { get; init; }
+    public string? RunbookUrl { get; init; }
     public string? Kind { get; init; }
 
     public required ScheduleKind ScheduleKind { get; init; }
@@ -48,6 +50,8 @@ public sealed record UpdateJobRequest
 {
     public string? Name { get; init; }
     public string? Description { get; init; }
+    public string? RunbookNotes { get; init; }
+    public string? RunbookUrl { get; init; }
     public string? CronExpression { get; init; }
     public int? IntervalSeconds { get; init; }
     public string? Timezone { get; init; }
@@ -81,6 +85,8 @@ public sealed record JobResponse
     public string Kind { get; init; } = "http";
     public string Name { get; init; } = "";
     public string? Description { get; init; }
+    public string? RunbookNotes { get; init; }
+    public string? RunbookUrl { get; init; }
     public string? Status { get; init; }
     public string ScheduleKind { get; init; } = "cron";
     public string? CronExpression { get; init; }

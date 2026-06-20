@@ -218,6 +218,29 @@ public sealed class JobMapperTests
     }
 
     [Fact]
+    public void Detects_changed_runbook_notes_and_url()
+    {
+        var d = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "job",
+            Url = "https://example.com",
+            Schedule = "0 9 * * 1",
+            RunbookNotes = "## Restart steps\n1. Restart the worker.",
+            RunbookUrl = "https://runbooks.example.com/job",
+        }, 0);
+
+        var server = ServerFromHttp(d) with { RunbookNotes = "old notes", RunbookUrl = "https://old.example.com/runbook" };
+
+        var result = _mapper.BuildUpdate(d, server);
+
+        Assert.True(result.HasChanges);
+        Assert.Contains(result.Changes, c => c.Field == "runbook_notes");
+        Assert.Contains(result.Changes, c => c.Field == "runbook_url");
+        Assert.Equal(d.RunbookNotes, result.Request.RunbookNotes);
+        Assert.Equal(d.RunbookUrl, result.Request.RunbookUrl);
+    }
+
+    [Fact]
     public void Schedule_change_cron_to_interval()
     {
         var d = _mapper.ToDesired(new ManifestJob
@@ -338,6 +361,8 @@ public sealed class JobMapperTests
         Kind = "http",
         Name = d.Name,
         Description = d.Description,
+        RunbookNotes = d.RunbookNotes,
+        RunbookUrl = d.RunbookUrl,
         ScheduleKind = d.ScheduleKind == ScheduleKind.Cron ? "cron" : "interval",
         CronExpression = d.CronExpression,
         IntervalSeconds = d.IntervalSeconds,
@@ -361,6 +386,8 @@ public sealed class JobMapperTests
         Kind = "heartbeat",
         Name = d.Name,
         Description = d.Description,
+        RunbookNotes = d.RunbookNotes,
+        RunbookUrl = d.RunbookUrl,
         ScheduleKind = d.ScheduleKind == ScheduleKind.Cron ? "cron" : "interval",
         CronExpression = d.CronExpression,
         IntervalSeconds = d.IntervalSeconds,

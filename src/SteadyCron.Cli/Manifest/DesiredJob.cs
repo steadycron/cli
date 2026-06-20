@@ -20,6 +20,12 @@ public sealed record DesiredJob
     /// <summary>Normalized: null when empty.</summary>
     public string? Description { get; init; }
 
+    /// <summary>Normalized: null when empty.</summary>
+    public string? RunbookNotes { get; init; }
+
+    /// <summary>Normalized: null when empty.</summary>
+    public string? RunbookUrl { get; init; }
+
     public ScheduleKind ScheduleKind { get; init; }
     public string? CronExpression { get; init; }
     public int? IntervalSeconds { get; init; }

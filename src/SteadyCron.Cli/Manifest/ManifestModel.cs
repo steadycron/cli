@@ -36,6 +36,12 @@ public sealed class ManifestJob
 
     public string? Description { get; set; }
 
+    /// <summary>Markdown runbook notes (max 4000 chars).</summary>
+    public string? RunbookNotes { get; set; }
+
+    /// <summary>Link to an external runbook (max 2048 chars).</summary>
+    public string? RunbookUrl { get; set; }
+
     // ── Schedule (exactly one of these) ──────────────────────────────────────────
     /// <summary>A 5-field cron expression, e.g. <c>"0 9 * * 1"</c>.</summary>
     public string? Schedule { get; set; }

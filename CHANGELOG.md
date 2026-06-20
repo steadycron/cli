@@ -6,6 +6,15 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-20
+
+### Added
+- `runbook_notes` and `runbook_url` fields on jobs in YAML manifests (`description`'s
+  neighbors in `ManifestJob`) — optional markdown remediation steps and an external
+  runbook link. Both flow through `apply`/`sync` like any other job field and are
+  embedded inline in failure alert notifications (Slack, Telegram, email) when the job
+  fails or a heartbeat is missed, so on-call sees the fix instead of just "Job X failed."
+
 ## [1.8.4] - 2026-06-18
 
 ### Fixed
