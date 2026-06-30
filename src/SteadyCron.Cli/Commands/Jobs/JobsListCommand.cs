@@ -78,7 +78,7 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
                 Markup.Escape(JobFormatting.ScheduleWithTz(job)),
                 Markup.Escape(job.Kind == "http" ? JobFormatting.When(job.NextFireAt) : "—"),
                 Markup.Escape(JobFormatting.When(job.LastFireAt)),
-                $"[grey]{Markup.Escape(job.JobKey ?? "—")}[/]");
+                Markup.Escape(job.JobKey ?? "—"));
         }
 
         output.Render(table);

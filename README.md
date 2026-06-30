@@ -114,6 +114,12 @@ jobs:
 
 See [`examples/steadycron.yaml`](examples/steadycron.yaml) for the complete field reference.
 
+To generate a fully commented boilerplate manifest covering every field, run:
+
+```bash
+steadycron init -o steadycron.yaml
+```
+
 ### Two interpolation mechanisms
 
 | Syntax | Where it runs | Scope |
@@ -371,6 +377,32 @@ steadycron apply steadycron.yaml --env-file secrets.env --namespace prod
 After migrating, you can tighten schedules and set per-job timezones — capabilities Vercel doesn't
 expose.
 
+## Starting from scratch: `init`
+
+`steadycron init` generates a fully documented boilerplate manifest (or Terraform HCL) that
+covers every SteadyCron feature. Use it to get started without reading the docs or creating
+resources in the dashboard first.
+
+```bash
+steadycron init                          # print documented YAML to stdout
+steadycron init -o steadycron.yaml       # write to file (refuses to overwrite)
+steadycron init --terraform              # Terraform HCL instead of YAML
+steadycron init --terraform -o main.tf   # write Terraform boilerplate to file
+```
+
+The generated manifest includes a namespace, template variables with `${ENV_VAR}` explanation,
+tags, all five alert channel kinds (email, Slack, webhook, Discord, Telegram), a fully annotated
+HTTP job (every field), a heartbeat monitor, and inline alert rules. Every field has a comment
+explaining what it does and listing valid values. Delete the sections you don't need, then run
+`steadycron plan steadycron.yaml` to preview.
+
+The Terraform boilerplate uses the exact resource and attribute names from the live
+`steadycron/steadycron` provider — `steadycron_http_job`, `steadycron_heartbeat_monitor`,
+`steadycron_alert_channel`, `steadycron_alert_rule`, `steadycron_tag`, and
+`steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
+
+`init` requires no API key and no configuration — run it before `steadycron configure`.
+
 ## Cron and monitoring as code in CI
 
 Add the SteadyCron GitHub Action to plan on pull requests and apply on merge:
@@ -422,7 +454,7 @@ See [`examples/ci/`](examples/ci/) for standalone `pull_request` and `push` work
 ## Activity reports
 
 ```bash
-steadycron report                  # digest of the last 24 h
+steadycron report                  # Overview of the last 24 h
 steadycron report --hours 6        # shorter window
 steadycron report --hours 168      # last 7 d (Developer plan and above)
 steadycron report --hours 720      # last 30 d (Team plan only)
@@ -430,30 +462,67 @@ steadycron report --verbose        # adds HTTP response bodies and full alert de
 steadycron report --json           # machine-readable (CI alerting, dashboards)
 ```
 
-The report command calls `/api/reports/summary` and shows:
+The report mirrors the web Overview dashboard — same calculations, same terminology, so the
+numbers always agree for an identical time window. It calls `/api/reports/summary` and shows:
 
-| Section | What you learn |
+| Section | What you see |
 |---|---|
-| **Summary** | Execution counts (total / success / failed), ping count, alert delivery counts |
-| **Failures** | Per-job block: last HTTP status, error message, duration, retry count, whether alerts fired |
-| **Alert deliveries** | Trigger → channel → delivered/failed/suppressed (full table in `--verbose`, problems-only otherwise) |
-| **Silent jobs** | Jobs that had zero activity in the window — schedule drift or misconfiguration |
-| **Footer** | One-line health verdict and exit code (non-zero on failures or undelivered alerts) |
+| **KPI row** | Total checks (HTTP + heartbeat), Successful + success-rate %, Incidents (failed checks), Alerts delivered/failed/suppressed, Jobs reporting |
+| **Active issues** | Jobs with failures or missed check-ins, ranked by attention severity: missed → abandoned → failure → late |
+| **Silent monitors** | Jobs with zero activity in the window — possible schedule drift or misconfiguration |
+| **Footer** | One-line health verdict; exits non-zero when failures or undelivered alerts are detected |
 
 Plan limits cap how far back you can query (Free: 1 day, Developer: 7 days, Team: 30 days).
 The server returns a `range_exceeds_plan` error with a clear message if the requested `--hours` exceeds your limit.
 
-## Managing resources directly
+## Logbook
 
 ```bash
-steadycron jobs list                       # table of all jobs
+steadycron logbook                                       # last 24 h of all event types
+steadycron logbook --hours 168                           # last 7 days
+steadycron logbook --domain executions                   # filter by category
+steadycron logbook --domain executions --domain alerts   # multiple categories
+steadycron logbook --severity critical                   # critical events only
+steadycron logbook --job my-job-key                      # events for a specific job
+steadycron logbook --page 2 --page-size 100             # paginate
+steadycron logbook --all                                 # fetch all pages
+steadycron logbook --verbose                             # full metadata per event
+steadycron logbook --all --json                          # machine-readable output
+```
+
+Mirrors the web Logbook page. Available `--domain` values:
+
+| Domain | Event types included |
+|---|---|
+| `executions` | HTTP execution succeeded / failed |
+| `heartbeats` | Heartbeat missed / recovered, ping received, run started / abandoned |
+| `alerts` | Alert delivered / failed / suppressed / pending |
+| `jobs` | Job created / deleted / paused / resumed |
+| `keys` | API key created / revoked |
+| `rules` | Alert rule created / deleted |
+| `channels` | Alert channel created / updated / deleted |
+| `subscription` | Plan upgrade / downgrade / cancellation / past-due / paused |
+
+`--severity` accepts `info`, `warning`, or `critical` (repeatable). `--job` accepts a job key,
+name, or id. `--all` pages through all results; omitting it returns the first `--page-size`
+events (default 50, max 100). `--verbose` shows every metadata field per event (HTTP status,
+error type, response excerpt, source IP, etc.).
+
+## Managing resources directly
+
+Commands that accept a `<JOB>` argument resolve it in order: GUID → job key → exact name. Job
+keys are shown in `jobs list` (Key column) and are stable across renames — prefer them over
+names in scripts.
+
+```bash
+steadycron jobs list                          # table of all jobs with their job keys
 steadycron jobs list --kind heartbeat --status missed
-steadycron jobs get weekly-digest-email    # by name or id
-steadycron jobs logs warm-cdn-cache -n 20
-steadycron jobs pause weekly-digest-email
-steadycron jobs resume weekly-digest-email
-steadycron jobs run warm-cdn-cache
-steadycron jobs delete old-job --yes
+steadycron jobs get my-job-key                # by job key (preferred), name, or id
+steadycron jobs logs my-job-key -n 20
+steadycron jobs pause my-job-key
+steadycron jobs resume my-job-key
+steadycron jobs run my-job-key
+steadycron jobs delete old-job-key --yes
 
 steadycron jobs create --name warm-cache --url https://api.myapp.com/warm \
   --method GET --interval 900 --skip-if-running
@@ -469,7 +538,6 @@ steadycron vars set digest_token "sk_live_…"
 steadycron channels list
 steadycron channels create --name "Ops email" --kind email --to ops@example.com
 
-# `jobs list` includes a job ID column — copy the id to use with rules commands
 steadycron rules list nightly-db-backup        # shows trigger, severity, channel kind and target
 steadycron rules add nightly-db-backup \
   --channel "Ops email" --trigger missed_heartbeat --severity p1

@@ -47,6 +47,21 @@ app.Configure(config =>
         .WithExample("report", "--hours", "6")
         .WithExample("report", "--hours", "168", "--verbose");
 
+    config.AddCommand<LogbookCommand>("logbook")
+        .WithDescription("Browse the complete account event history: executions, heartbeats, alerts, job changes, and more.")
+        .WithExample("logbook")
+        .WithExample("logbook", "--hours", "168")
+        .WithExample("logbook", "--domain", "executions", "--domain", "alerts")
+        .WithExample("logbook", "--severity", "critical")
+        .WithExample("logbook", "--job", "my-job-key")
+        .WithExample("logbook", "--all", "--json");
+
+    config.AddCommand<InitCommand>("init")
+        .WithDescription("Generate a fully documented boilerplate manifest (or Terraform HCL) covering every SteadyCron feature.")
+        .WithExample("init")
+        .WithExample("init", "-o", "steadycron.yaml")
+        .WithExample("init", "--terraform", "-o", "steadycron.tf");
+
     config.AddCommand<ValidateCommand>("validate")
         .WithDescription("Validate a manifest locally (schema + cross-references, no API calls).")
         .WithExample("validate", "steadycron.yaml")

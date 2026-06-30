@@ -45,56 +45,142 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         return ExitCodes.Ok;
     }
 
+    // Matches the web's ATTENTION_SEVERITY: missed=0, abandoned=1, failure=2, late=3.
+    private static readonly Dictionary<string, int> AttentionSeverity = new(StringComparer.Ordinal)
+    {
+        ["missed"] = 0,
+        ["abandoned"] = 1,
+        ["failure"] = 2,
+        ["late"] = 3,
+    };
+
+    private record AttentionItem(
+        string JobName,
+        string Kind,
+        string Status,
+        int FailureCount,
+        ReportLastFailure? LastFailure,
+        DateTimeOffset? OccurredAt,
+        string? CronExpression,
+        int? IntervalSeconds,
+        string? Timezone);
+
     private static void RenderReport(ReportSummaryResponse r, bool verbose, OutputContext output)
     {
         var s = r.Summary;
-        var windowLabel = FormatWindow(r.From, r.To);
 
-        // ── Header ────────────────────────────────────────────────────────────────
+        // ── Header ─────────────────────────────────────────────────────────────────
 
-        output.Line($"Report  {windowLabel}");
+        output.Line($"Overview  {FormatWindow(r.From, r.To)}");
         output.Line(new string('─', 60));
         output.Line();
 
-        // ── Summary panel ─────────────────────────────────────────────────────────
+        // ── KPI summary ────────────────────────────────────────────────────────────
+        // Calculations mirror the web Overview page exactly.
+        // total_checks = total_executions (HTTP) + heartbeat check-ins (success/fail pings).
+        // heartbeat count derived as total_checks − total_executions, same as the web.
 
-        var summaryTable = new Table()
+        var httpChecks = s.TotalExecutions;
+        var heartbeatChecks = Math.Max(0, s.TotalChecks - s.TotalExecutions);
+
+        double? successRate = s.TotalChecks > 0
+            ? (double)s.SuccessfulChecks / s.TotalChecks * 100
+            : null;
+
+        // Mirrors web: toFixed(0) when rate ≥ 99.95 or rate == 0, else toFixed(1).
+        string FormatRate(double rate) =>
+            rate >= 99.95 || rate == 0 ? $"{rate:F0}%" : $"{rate:F1}%";
+
+        var alertsSub = $"{s.AlertsDelivered} delivered · {s.AlertsFailed} failed" +
+            (s.AlertsSuppressed > 0 ? $" · {s.AlertsSuppressed} suppressed" : "");
+
+        var kpi = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
-            .AddColumn(new TableColumn("").Width(22))
+            .AddColumn(new TableColumn("").Width(18))
+            .AddColumn(new TableColumn("").Width(8))
             .AddColumn("");
 
-        summaryTable.AddRow("[bold]Executions[/]",
-            $"[white]{s.TotalExecutions}[/]" +
-            (s.TotalExecutions > 0
-                ? $"  ([green]{s.SuccessfulExecutions} ✓[/]  [red]{s.FailedExecutions} ✗[/])"
-                : ""));
+        kpi.AddRow(
+            "[bold]Total checks[/]",
+            $"[white]{s.TotalChecks}[/]",
+            $"[grey]{httpChecks} HTTP · {heartbeatChecks} heartbeat[/]");
 
-        summaryTable.AddRow("[bold]Pings (heartbeat)[/]",
-            $"[white]{s.TotalPings}[/]");
+        kpi.AddRow(
+            "[bold]Successful[/]",
+            $"[green]{s.SuccessfulChecks}[/]",
+            successRate.HasValue ? $"[grey]{Markup.Escape(FormatRate(successRate.Value))} success rate[/]" : "");
 
-        summaryTable.AddRow("[bold]Alerts[/]",
-            $"[white]{s.TotalAlerts}[/]" +
-            (s.TotalAlerts > 0
-                ? $"  ([green]{s.AlertsDelivered} delivered[/]" +
-                  $"  [red]{s.AlertsFailed} failed[/]" +
-                  $"  [grey]{s.AlertsSuppressed} suppressed[/])"
-                : ""));
+        kpi.AddRow(
+            "[bold]Incidents[/]",
+            s.FailedChecks > 0 ? $"[red]{s.FailedChecks}[/]" : $"[grey]{s.FailedChecks}[/]",
+            s.FailedChecks == 0 ? "[grey]all clear[/]" : "");
 
-        summaryTable.AddRow("[bold]Jobs[/]",
-            $"[white]{s.TotalJobsActive}[/]  " +
-            $"([grey]{s.TotalJobsWithActivity} active[/]  " +
-            $"[yellow]{s.TotalJobsSilent} silent[/])");
+        kpi.AddRow(
+            "[bold]Alerts[/]",
+            $"[white]{s.TotalAlerts}[/]",
+            s.TotalAlerts > 0 ? $"[grey]{Markup.Escape(alertsSub)}[/]" : "");
 
-        output.Render(summaryTable);
+        kpi.AddEmptyRow();
+
+        kpi.AddRow(
+            "[bold]Jobs reporting[/]",
+            $"[white]{s.TotalJobsWithActivity} / {s.TotalJobsActive}[/]",
+            s.TotalJobsSilent > 0 ? $"[yellow]{s.TotalJobsSilent} silent[/]" : "[grey]all reporting[/]");
+
+        output.Render(kpi);
         output.Line();
 
-        // ── Failures ──────────────────────────────────────────────────────────────
+        // ── Active issues ──────────────────────────────────────────────────────────
+        // Mirrors the web's "Active issues" card: jobs whose current_status is in
+        // {missed, abandoned, failure, late}, drawn from both jobs and silent_jobs,
+        // sorted by the same severity order as the web (missed → abandoned → failure → late).
+
+        var attention = BuildAttention(r);
+
+        output.Render(new Rule(
+            attention.Count > 0
+                ? $"[bold]Active issues ({attention.Count})[/]"
+                : "[bold]Active issues[/]").LeftJustified());
+
+        if (attention.Count == 0)
+        {
+            output.Markup("[grey]  All systems healthy — no active issues.[/]");
+            output.Line();
+        }
+        else
+        {
+            var tbl = new Table().Border(TableBorder.Rounded).Expand();
+            tbl.AddColumn("Job");
+            tbl.AddColumn("Kind");
+            tbl.AddColumn("Issue");
+            tbl.AddColumn("Detail");
+            tbl.AddColumn("Schedule");
+            tbl.AddColumn(new TableColumn("Occurred at").NoWrap());
+
+            foreach (var item in attention)
+            {
+                tbl.AddRow(
+                    Markup.Escape(item.JobName),
+                    Markup.Escape(KindLabel(item.Kind)),
+                    IssueMarkup(item.Status),
+                    Markup.Escape(DetailText(item.Status, item.Kind, item.LastFailure, item.FailureCount)),
+                    Markup.Escape(HumanSchedule(item.CronExpression, item.IntervalSeconds, item.Timezone)),
+                    Markup.Escape(item.OccurredAt.HasValue ? FormatTs(item.OccurredAt.Value) : "—"));
+            }
+
+            output.Render(tbl);
+        }
+
+        output.Line();
+
+        // ── Incidents ─────────────────────────────────────────────────────────────
+        // Per-job failure detail for every job that failed in the window.
 
         var failures = r.Jobs.Where(j => j.FailureCount > 0).ToList();
         if (failures.Count > 0)
         {
-            output.Markup($"[red bold]FAILURES ({failures.Count})[/]");
+            output.Render(new Rule($"[red bold]Incidents ({failures.Count})[/]").LeftJustified());
             output.Line();
 
             foreach (var job in failures)
@@ -104,30 +190,35 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
             }
         }
 
-        // ── Jobs with activity (no failures) ──────────────────────────────────────
+        // ── Healthy jobs (verbose only) ────────────────────────────────────────────
 
         var healthy = r.Jobs.Where(j => j.FailureCount == 0).ToList();
         if (healthy.Count > 0 && verbose)
         {
-            output.Markup($"[green bold]HEALTHY JOBS ({healthy.Count})[/]");
+            output.Render(new Rule($"[green bold]Healthy ({healthy.Count})[/]").LeftJustified());
             output.Line();
+
             var tbl = new Table().Border(TableBorder.Rounded).Expand();
             tbl.AddColumn("Job");
             tbl.AddColumn("Kind");
-            tbl.AddColumn("Executions / Pings");
+            tbl.AddColumn("Checks");
             tbl.AddColumn("Last activity");
+
             foreach (var job in healthy)
             {
                 tbl.AddRow(
                     Markup.Escape(job.JobName),
-                    Markup.Escape(job.Kind),
+                    Markup.Escape(KindLabel(job.Kind)),
                     job.Kind == "http"
                         ? $"[green]{job.ExecutionCount}[/]"
                         : $"[green]{job.PingCount}[/]",
-                    Markup.Escape(job.LastExecutionAt is not null
-                        ? FormatTs(job.LastExecutionAt.Value)
-                        : "—"));
+                    Markup.Escape(job.LastSeenAt.HasValue
+                        ? FormatTs(job.LastSeenAt.Value)
+                        : job.LastExecutionAt.HasValue
+                            ? FormatTs(job.LastExecutionAt.Value)
+                            : "—"));
             }
+
             output.Render(tbl);
             output.Line();
         }
@@ -138,17 +229,16 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         if (allJobAlerts.Count > 0)
         {
             var failedAlerts = allJobAlerts.Where(a => a.Status is "failed" or "suppressed").ToList();
-            var headerLabel = failedAlerts.Count > 0
-                ? $"[yellow bold]ALERT DELIVERIES ({allJobAlerts.Count} total, {failedAlerts.Count} problem(s))[/]"
-                : $"[bold]ALERT DELIVERIES ({allJobAlerts.Count})[/]";
+            var showAll = verbose || failedAlerts.Count > 0;
 
-            output.Markup(headerLabel);
+            var headerLabel = failedAlerts.Count > 0
+                ? $"[yellow bold]Alert deliveries ({allJobAlerts.Count} total, {failedAlerts.Count} problem(s))[/]"
+                : $"[bold]Alert deliveries ({allJobAlerts.Count})[/]";
+
+            output.Render(new Rule(headerLabel).LeftJustified());
             output.Line();
 
-            var showAll = verbose || failedAlerts.Count > 0;
-            var alertsToShow = showAll ? allJobAlerts : failedAlerts;
-
-            if (!showAll && alertsToShow.Count == 0)
+            if (!showAll)
             {
                 output.Info("All alerts delivered successfully.");
             }
@@ -163,7 +253,10 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
                 foreach (var jAlert in r.Jobs)
                 {
-                    var alerts = showAll ? jAlert.AlertDeliveries : jAlert.AlertDeliveries.Where(a => a.Status is "failed" or "suppressed").ToList();
+                    var alerts = showAll
+                        ? jAlert.AlertDeliveries
+                        : (IEnumerable<ReportAlertDelivery>)jAlert.AlertDeliveries
+                            .Where(a => a.Status is "failed" or "suppressed");
                     foreach (var a in alerts)
                     {
                         tbl.AddRow(
@@ -196,7 +289,9 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
         if (r.SilentJobs.Count > 0)
         {
-            output.Markup($"[yellow bold]SILENT JOBS — no activity in window ({r.SilentJobs.Count})[/]");
+            output.Render(new Rule($"[yellow bold]Silent jobs ({r.SilentJobs.Count})[/]").LeftJustified());
+            output.Markup("[grey]  No activity in window — possible dead schedules.[/]");
+            output.Line();
             output.Line();
 
             var tbl = new Table().Border(TableBorder.Rounded).Expand();
@@ -209,7 +304,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
             {
                 tbl.AddRow(
                     Markup.Escape(j.JobName),
-                    Markup.Escape(j.Kind),
+                    Markup.Escape(KindLabel(j.Kind)),
                     JobFormatting.StatusMarkup(j.CurrentStatus),
                     Markup.Escape(j.NextFireAt is not null ? FormatTs(j.NextFireAt.Value) : "—"));
             }
@@ -220,23 +315,118 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
         // ── Footer ────────────────────────────────────────────────────────────────
 
-        if (s.FailedExecutions == 0 && s.AlertsFailed == 0)
+        if (s.FailedChecks == 0 && s.AlertsFailed == 0)
         {
             output.Success($"All {s.TotalJobsWithActivity} active job(s) healthy in this window.");
         }
         else
         {
             var parts = new List<string>();
-            if (s.FailedExecutions > 0) { parts.Add($"{s.FailedExecutions} execution failure(s)"); }
+            if (s.FailedChecks > 0) { parts.Add($"{s.FailedChecks} incident(s)"); }
             if (s.AlertsFailed > 0) { parts.Add($"{s.AlertsFailed} undelivered alert(s)"); }
             output.Warn($"{string.Join(", ", parts)} — see details above.");
         }
 
         if (r.SilentJobs.Count > 0)
         {
-            output.Warn($"{r.SilentJobs.Count} job(s) had no activity in this window. Check their schedules or pause them if retired.");
+            output.Warn($"{r.SilentJobs.Count} job(s) had no activity in this window — check their schedules or pause them if retired.");
         }
     }
+
+    private static List<AttentionItem> BuildAttention(ReportSummaryResponse r)
+    {
+        var items = new List<AttentionItem>();
+
+        foreach (var j in r.Jobs)
+        {
+            if (!AttentionSeverity.ContainsKey(j.CurrentStatus)) { continue; }
+
+            items.Add(new AttentionItem(
+                j.JobName, j.Kind, j.CurrentStatus,
+                j.FailureCount, j.LastFailure,
+                j.LastFailure?.OccurredAt ?? j.LastSeenAt,
+                j.CronExpression, j.IntervalSeconds, j.Timezone));
+        }
+
+        foreach (var j in r.SilentJobs)
+        {
+            if (!AttentionSeverity.ContainsKey(j.CurrentStatus)) { continue; }
+
+            items.Add(new AttentionItem(
+                j.JobName, j.Kind, j.CurrentStatus,
+                0, null,
+                j.LastSeenAt,
+                j.CronExpression, j.IntervalSeconds, j.Timezone));
+        }
+
+        return items
+            .OrderBy(i => AttentionSeverity.TryGetValue(i.Status, out var v) ? v : 50)
+            .ToList();
+    }
+
+    // Mirrors web's issueLabel().
+    private static string IssueMarkup(string status) => status switch
+    {
+        "missed" => "[red]Missed[/]",
+        "abandoned" => "[yellow]Abandoned[/]",
+        "failure" => "[red]Failed[/]",
+        "late" => "[yellow]Late[/]",
+        _ => Markup.Escape(status),
+    };
+
+    // Mirrors web's detailText().
+    private static string DetailText(string status, string kind, ReportLastFailure? f, int failureCount)
+    {
+        string reason;
+        if (f?.HttpStatusCode is { } code)
+        {
+            reason = $"HTTP {code}" + (f.ErrorMessage is not null ? $" · {f.ErrorMessage}" : "");
+        }
+        else if (f?.ErrorMessage is not null)
+        {
+            reason = f.ErrorMessage;
+        }
+        else if (f?.ErrorKind is not null)
+        {
+            reason = f.ErrorKind;
+        }
+        else
+        {
+            reason = status switch
+            {
+                "missed" => kind == "heartbeat" ? "Missed check-in" : "Missed scheduled run",
+                "abandoned" => "Started but never completed",
+                "late" => kind == "heartbeat" ? "Check-in overdue" : "Run overdue",
+                "failure" => "Execution failed",
+                _ => "—",
+            };
+        }
+
+        return failureCount > 1 ? $"{reason} · {failureCount}× failed" : reason;
+    }
+
+    // Mirrors web's humanSchedule().
+    private static string HumanSchedule(string? cron, int? intervalSeconds, string? timezone)
+    {
+        if (cron is not null)
+        {
+            var tz = timezone ?? "";
+            var tzAbbrev = tz.Contains('/') ? tz[(tz.LastIndexOf('/') + 1)..] : tz;
+            return $"{cron} · {tzAbbrev}";
+        }
+
+        if (intervalSeconds is { } s)
+        {
+            if (s < 60) { return $"Every {s}s"; }
+            if (s < 3600) { return $"Every {s / 60}m"; }
+            return $"Every {s / 3600}h";
+        }
+
+        return "—";
+    }
+
+    private static string KindLabel(string kind) =>
+        kind == "heartbeat" ? "Heartbeat" : "HTTP";
 
     private static void RenderFailedJob(ReportJobSummary job, bool verbose, OutputContext output)
     {
@@ -304,7 +494,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
     {
         var f = from.ToLocalTime();
         var t = to.ToLocalTime();
-        var offset = f.ToString("zzz"); // e.g. "+02:00" or "+00:00"
+        var offset = f.ToString("zzz");
         if (f.Date == t.Date)
         {
             return $"{f:yyyy-MM-dd HH:mm} → {t:HH:mm} ({offset})";

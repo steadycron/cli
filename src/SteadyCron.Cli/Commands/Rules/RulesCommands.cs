@@ -50,7 +50,7 @@ internal static class AlertParsing
 public sealed class RulesListSettings : CliSettings
 {
     [CommandArgument(0, "<JOB>")]
-    [Description("Job id (GUID) or exact name.")]
+    [Description("Job key, exact name, or id (GUID).")]
     public string Job { get; set; } = string.Empty;
 }
 
@@ -107,7 +107,7 @@ public sealed class RulesListCommand : SteadyCronCommandBase<RulesListSettings>
 public sealed class RuleAddSettings : CliSettings
 {
     [CommandArgument(0, "<JOB>")]
-    [Description("Job id (GUID) or exact name.")]
+    [Description("Job key, exact name, or id (GUID).")]
     public string Job { get; set; } = string.Empty;
 
     [CommandOption("--channel <CHANNEL>")]
@@ -138,7 +138,7 @@ public sealed class RuleAddSettings : CliSettings
     {
         if (string.IsNullOrWhiteSpace(Job))
         {
-            return ValidationResult.Error("A job id or name is required.");
+            return ValidationResult.Error("A job key, name, or id is required.");
         }
 
         if (string.IsNullOrWhiteSpace(Channel))
@@ -243,7 +243,7 @@ public sealed class RuleDeleteCommand : SteadyCronCommandBase<RuleDeleteSettings
 public sealed class RulesTestSettings : CliSettings
 {
     [CommandArgument(0, "<JOB>")]
-    [Description("Job id (GUID) or exact name.")]
+    [Description("Job key, exact name, or id (GUID).")]
     public string Job { get; set; } = string.Empty;
 }
 

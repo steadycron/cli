@@ -201,6 +201,39 @@ public sealed class SteadyCronClient
         return GetAsync<Models.ReportSummaryResponse>(query, ct);
     }
 
+    // ── Logbook ──────────────────────────────────────────────────────────────────────
+
+    public Task<Models.LogbookResponse> ListLogbookEventsAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IReadOnlyList<string>? eventTypes = null,
+        IReadOnlyList<string>? severities = null,
+        Guid? jobId = null,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var parts = new List<string>
+        {
+            $"from={Uri.EscapeDataString(from.ToString("O"))}",
+            $"to={Uri.EscapeDataString(to.ToString("O"))}",
+            $"page={page}",
+            $"page_size={pageSize}",
+        };
+        if (eventTypes is { Count: > 0 })
+        {
+            foreach (var t in eventTypes) { parts.Add($"event_type={Uri.EscapeDataString(t)}"); }
+        }
+
+        if (severities is { Count: > 0 })
+        {
+            foreach (var s in severities) { parts.Add($"severity={Uri.EscapeDataString(s)}"); }
+        }
+
+        if (jobId.HasValue) { parts.Add($"job_id={jobId.Value}"); }
+        return GetAsync<Models.LogbookResponse>($"api/logbook?{string.Join("&", parts)}", ct);
+    }
+
     // ── Alert rules ─────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<AlertRuleResponse>> ListRulesAsync(Guid jobId, CancellationToken ct = default) =>

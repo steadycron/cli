@@ -19,6 +19,9 @@ public sealed record ReportFilters(
     IReadOnlyList<string> Tags);
 
 public sealed record ReportSummaryStats(
+    int TotalChecks,
+    int SuccessfulChecks,
+    int FailedChecks,
     int TotalExecutions,
     int SuccessfulExecutions,
     int FailedExecutions,
@@ -42,6 +45,10 @@ public sealed record ReportJobSummary(
     int FailureCount,
     int PingCount,
     DateTimeOffset? LastExecutionAt,
+    DateTimeOffset? LastSeenAt,
+    string? CronExpression,
+    int? IntervalSeconds,
+    string? Timezone,
     ReportLastFailure? LastFailure,
     IReadOnlyList<ReportAlertDelivery> AlertDeliveries);
 
@@ -79,6 +86,10 @@ public sealed record ReportSilentJob(
     string CurrentStatus,
     bool IsPaused,
     string? PausedReason,
-    DateTimeOffset? NextFireAt);
+    DateTimeOffset? NextFireAt,
+    DateTimeOffset? LastSeenAt,
+    string? CronExpression,
+    int? IntervalSeconds,
+    string? Timezone);
 
 public sealed record ReportTagInfo(Guid Id, string Key, string Value, string? Color);

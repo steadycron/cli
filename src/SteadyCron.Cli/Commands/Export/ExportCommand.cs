@@ -12,7 +12,7 @@ namespace SteadyCron.Cli.Commands.Export;
 public sealed class ExportSettings : CliSettings
 {
     [CommandArgument(0, "[TARGET]")]
-    [Description("For --scope job: job name or id to export.")]
+    [Description("For --scope job: job key, name, or id to export.")]
     public string? Target { get; set; }
 
     [CommandOption("--scope")]
@@ -74,7 +74,7 @@ public sealed class ExportCommand : SteadyCronCommandBase<ExportSettings>
                 {
                     if (string.IsNullOrWhiteSpace(settings.Target))
                     {
-                        output.Error("--scope job requires a job name or id as the argument.");
+                        output.Error("--scope job requires a job key, name, or id as the argument.");
                         return ExitCodes.Error;
                     }
 
@@ -114,7 +114,7 @@ public sealed class ExportCommand : SteadyCronCommandBase<ExportSettings>
                 {
                     if (string.IsNullOrWhiteSpace(settings.Target))
                     {
-                        output.Error("--scope job requires a job name or id as the argument.");
+                        output.Error("--scope job requires a job key, name, or id as the argument.");
                         return ExitCodes.Error;
                     }
 

@@ -6,6 +6,49 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-30
+
+### Added
+
+- `steadycron logbook [--flags]` — scrollable account event history covering every event type:
+  HTTP executions, heartbeat check-ins, alert deliveries, job lifecycle changes, API key events,
+  subscription events, and more. Filters: `--domain` (category slug, repeatable), `--severity`
+  (`info`/`warning`/`critical`, repeatable), `--job` (key, name, or id), `--hours` (default 24).
+  Pagination via `--page`/`--page-size` or `--all` to fetch every page. `--verbose` shows full
+  per-event metadata; `--json` emits machine-readable output. Mirrors the web Logbook page,
+  including the same event labels and metadata field names. Available domains: `executions`,
+  `heartbeats`, `alerts`, `jobs`, `keys`, `rules`, `channels`, `subscription`.
+
+- `steadycron init` — generates a fully commented boilerplate manifest covering every SteadyCron
+  feature: namespace, template variables (`${ENV_VAR}` interpolation), tags, all five alert channel
+  kinds (email, Slack, webhook, Discord, Telegram), an HTTP job with every supported field
+  (schedule/interval, method, headers, body, timeout, retries, skip-if-running, misfire policy,
+  tags, rules), and a heartbeat monitor (grace, stuck-run detection). Every field carries an
+  explanatory inline comment. Pass `--terraform` to generate the equivalent Terraform HCL (exact
+  resource and attribute names from the live provider). Write to file with `-o`; refuses to
+  overwrite existing files. Requires no API key — runs before `steadycron configure`.
+
+- Job key accepted as a universal job identifier across all commands that take a `<JOB>` argument:
+  `jobs get`, `jobs logs`, `jobs pause`, `jobs resume`, `jobs run`, `jobs delete`, `rules list`,
+  `rules add`, `rules test`, `export --scope job`, and `logbook --job`. Resolution order: GUID →
+  job key (exact) → name (exact, with ambiguity detection). Job keys are shown in `jobs list` and
+  are stable across renames, making them the preferred way to reference a job in scripts.
+
+### Changed
+
+- `steadycron report` output redesigned to mirror the web Overview dashboard. The header is now
+  "Overview", the KPI summary shows Total checks, Successful (+ success-rate percentage), Incidents
+  (unified `failed_checks` count covering both HTTP and heartbeat failures), Alerts, and Jobs
+  reporting. The "Active issues" section combines failing jobs and silent monitors ranked by
+  attention severity (missed → abandoned → failure → late), matching the web's sort order. Success
+  rate is calculated as `successful_checks / total_checks` (not execution-only), so CLI and
+  dashboard numbers always agree for the same time window.
+
+### Fixed
+
+- Job Key column in `steadycron jobs list` was rendered in grey; it now uses the same white as all
+  other columns.
+
 ## [1.9.0] - 2026-06-20
 
 ### Added
