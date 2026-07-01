@@ -3,6 +3,7 @@ using SteadyCron.Cli.Api.Models;
 
 namespace SteadyCron.Cli.Output;
 
+
 /// <summary>Shared formatting for jobs and executions (status colors, schedule/relative-time text).</summary>
 public static class JobFormatting
 {
@@ -77,5 +78,21 @@ public static class JobFormatting
         }
 
         return future ? $"in {magnitude}" : $"{magnitude} ago";
+    }
+
+    /// <summary>
+    /// Renders the three ping URLs for a heartbeat monitor to the output.
+    /// Optionally prefixes with a bold job-name header.
+    /// </summary>
+    public static void RenderPingUrls(OutputContext output, string? name, PingUrls urls)
+    {
+        if (name is not null)
+        {
+            output.Markup($"  [bold]{Markup.Escape(name)}[/]");
+        }
+
+        output.Markup($"  [grey]success[/]  {Markup.Escape(urls.Success)}");
+        output.Markup($"  [grey]start  [/]  {Markup.Escape(urls.Start)}");
+        output.Markup($"  [grey]fail   [/]  {Markup.Escape(urls.Fail)}");
     }
 }

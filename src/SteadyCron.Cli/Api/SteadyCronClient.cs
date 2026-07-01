@@ -196,7 +196,9 @@ public sealed class SteadyCronClient
         CancellationToken ct = default)
     {
         var to = DateTimeOffset.UtcNow;
-        var from = to.AddHours(-hours);
+        // Match the dashboard's 60-second safety margin so the window calculation is
+        // identical and plan-cap edge cases can't reject an exact-boundary request.
+        var from = to.AddHours(-hours).AddMinutes(1);
         var query = $"api/reports/summary?from={Uri.EscapeDataString(from.ToString("O"))}&to={Uri.EscapeDataString(to.ToString("O"))}";
         return GetAsync<Models.ReportSummaryResponse>(query, ct);
     }

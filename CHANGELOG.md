@@ -6,6 +6,54 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-07-01
+
+### Added
+
+- **`steadycron logstream`** — streams live logbook events to the terminal by polling
+  `GET /api/logbook` on a short interval and printing each new event as a plain scrolling line
+  (Azure log-stream style — no table). Ctrl+C exits cleanly. Options:
+  - `--since N` (default 60) — tail the last N seconds before going live; `--since 0` for
+    live-only.
+  - `--domain`, `--severity`, `--job` — same filter surface as `logbook`.
+  - `--interval N` (default 2) — poll cadence in seconds.
+  - `--json` — outputs NDJSON (one JSON object per event, no headers) for piping to `jq`.
+  - An idle marker (`── HH:mm:ss ──`) is printed every 30 seconds of silence so it is clear
+    the command is still connected.
+
+- **`steadycron jobs ping-urls [JOB]`** — prints the success/start/fail ping URLs for
+  heartbeat monitors. Omit the argument to list every monitor at once (useful right after
+  `apply`). Supports `--json`.
+
+- **`steadycron jobs snippet <JOB> [--lang LANG]`** — generates ready-to-paste integration
+  code that wires a heartbeat monitor's ping URLs into a script or workflow. The snippet is
+  written to stdout so it can be piped or redirected into a file. Supported languages:
+  - `bash` (default) — `set -euo pipefail` with `trap '…fail…' ERR` and a final success ping.
+  - `python` — `urllib.request` with try/except and a `PING_BASE` constant.
+  - `node` — `fetch` with async/await try/catch and `process.exit(1)` on error.
+  - `github-actions` — full workflow YAML with `on.schedule` (pre-filled from the job's cron
+    if available), `${{ secrets.STEADYCRON_PING_URL }}`, and `if: success()` / `if: failure()`
+    steps. Supports `--json` for structured output.
+
+- **`jobs pause` and `jobs resume` now support bulk operations** via `--tag <key:value>`
+  (repeatable, AND logic) and `--all`. Both flags show the matched job list, prompt for
+  confirmation (bypass with `--yes`), then execute per job and print a `✓` / `skip` / `✗`
+  result for each, followed by a summary line. Single-job behaviour is unchanged.
+
+- **Ping URLs displayed after `apply`/`sync`** — when a manifest apply creates new heartbeat
+  monitors, their ping URLs are automatically fetched and printed at the end of the apply
+  output so users don't need a follow-up `jobs ping-urls` call.
+
+### Fixed
+
+- **Report total-checks mismatch** — the CLI's `report` window now applies the same 60-second
+  safety margin as the dashboard (`from = now − hours + 1 min`) so the total-checks and
+  successful-checks counts agree with what the web Overview page shows for the same period.
+
+- **Silent jobs table styling** — the table in the "Silent jobs" section now renders in grey
+  (border, column headers, and cell text), visually de-emphasising it relative to the "Active
+  issues" section above. The section heading rule stays yellow.
+
 ## [1.10.0] - 2026-06-30
 
 ### Added
@@ -206,7 +254,14 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/steadycron/cli/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/steadycron/cli/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/steadycron/cli/compare/v1.8.4...v1.9.0
+[1.8.4]: https://github.com/steadycron/cli/compare/v1.8.3...v1.8.4
+[1.8.3]: https://github.com/steadycron/cli/compare/v1.8.2...v1.8.3
+[1.8.2]: https://github.com/steadycron/cli/compare/v1.8.1...v1.8.2
+[1.8.1]: https://github.com/steadycron/cli/compare/v1.6.0...v1.8.1
 [1.6.0]: https://github.com/steadycron/cli/compare/v1.4.0...v1.6.0
 [1.4.0]: https://github.com/steadycron/cli/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/steadycron/cli/compare/v1.2.2...v1.3.0

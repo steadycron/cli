@@ -128,7 +128,9 @@ public sealed class ReconcileEngine
                 Prune = settings.Prune,
             }, ct);
 
-        return RenderApplyResult(output, applyResponse);
+        var exitCode = RenderApplyResult(output, applyResponse);
+        await RenderCreatedHeartbeatPingUrlsAsync(output, applyResponse, client, ct);
+        return exitCode;
     }
 
     // ── JSON path ─────────────────────────────────────────────────────────────────
@@ -202,4 +204,44 @@ public sealed class ReconcileEngine
 
     private static bool IsInteractive() =>
         !Console.IsInputRedirected && !Console.IsOutputRedirected;
+
+    /// <summary>
+    /// After a successful apply, fetches all heartbeat jobs whose keys appear in the
+    /// create-action list and prints their ping URLs. This saves users a follow-up
+    /// `jobs ping-urls` call when setting up new monitors.
+    /// </summary>
+    private static async Task RenderCreatedHeartbeatPingUrlsAsync(
+        OutputContext output,
+        ReconcileResponse result,
+        SteadyCronClient client,
+        CancellationToken ct)
+    {
+        var createdJobKeys = result.Changes
+            .Where(c => c.Action is "create" && c.Resource is "job")
+            .Select(c => c.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (createdJobKeys.Count == 0) { return; }
+
+        var heartbeatJobs = await client.ListAllJobsAsync(kind: "heartbeat", ct: ct);
+        var newMonitors = heartbeatJobs
+            .Where(j => j.JobKey is not null
+                        && createdJobKeys.Contains(j.JobKey)
+                        && j.PingUrls is not null)
+            .ToList();
+
+        if (newMonitors.Count == 0) { return; }
+
+        output.Line();
+        output.Markup(newMonitors.Count == 1
+            ? "[grey]Heartbeat ping URLs for the new monitor:[/]"
+            : $"[grey]Heartbeat ping URLs for {newMonitors.Count} new monitors:[/]");
+        output.Line();
+
+        foreach (var job in newMonitors)
+        {
+            JobFormatting.RenderPingUrls(output, job.Name, job.PingUrls!);
+            output.Line();
+        }
+    }
 }

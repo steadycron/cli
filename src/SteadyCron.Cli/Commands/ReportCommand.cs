@@ -290,23 +290,20 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         if (r.SilentJobs.Count > 0)
         {
             output.Render(new Rule($"[yellow bold]Silent jobs ({r.SilentJobs.Count})[/]").LeftJustified());
-            output.Markup("[grey]  No activity in window — possible dead schedules.[/]");
-            output.Line();
-            output.Line();
 
-            var tbl = new Table().Border(TableBorder.Rounded).Expand();
-            tbl.AddColumn("Job");
-            tbl.AddColumn("Kind");
-            tbl.AddColumn("Status");
-            tbl.AddColumn(new TableColumn("Next fire").NoWrap());
+            var tbl = new Table().Border(TableBorder.Rounded).Expand().BorderColor(Color.Grey);
+            tbl.AddColumn(new TableColumn("[grey]Job[/]"));
+            tbl.AddColumn(new TableColumn("[grey]Kind[/]"));
+            tbl.AddColumn(new TableColumn("[grey]Status[/]"));
+            tbl.AddColumn(new TableColumn("[grey]Next fire[/]").NoWrap());
 
             foreach (var j in r.SilentJobs)
             {
                 tbl.AddRow(
-                    Markup.Escape(j.JobName),
-                    Markup.Escape(KindLabel(j.Kind)),
+                    $"[grey]{Markup.Escape(j.JobName)}[/]",
+                    $"[grey]{Markup.Escape(KindLabel(j.Kind))}[/]",
                     JobFormatting.StatusMarkup(j.CurrentStatus),
-                    Markup.Escape(j.NextFireAt is not null ? FormatTs(j.NextFireAt.Value) : "—"));
+                    $"[grey]{Markup.Escape(j.NextFireAt is not null ? FormatTs(j.NextFireAt.Value) : "—")}[/]");
             }
 
             output.Render(tbl);

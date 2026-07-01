@@ -47,6 +47,13 @@ app.Configure(config =>
         .WithExample("report", "--hours", "6")
         .WithExample("report", "--hours", "168", "--verbose");
 
+    config.AddCommand<LogstreamCommand>("logstream")
+        .WithDescription("Stream live logbook events to the terminal (polls every 2 s, Ctrl+C to stop).")
+        .WithExample("logstream")
+        .WithExample("logstream", "--since", "300", "--domain", "heartbeats")
+        .WithExample("logstream", "--severity", "critical", "--job", "nightly-backup")
+        .WithExample("logstream", "--json");
+
     config.AddCommand<LogbookCommand>("logbook")
         .WithDescription("Browse the complete account event history: executions, heartbeats, alerts, job changes, and more.")
         .WithExample("logbook")
@@ -113,8 +120,24 @@ app.Configure(config =>
         jobs.AddCommand<JobGetCommand>("get").WithDescription("Show a job's full definition.");
         jobs.AddCommand<JobCreateCommand>("create").WithDescription("Create a single job from flags.");
         jobs.AddCommand<JobLogsCommand>("logs").WithDescription("Show recent executions of an HTTP job.");
-        jobs.AddCommand<JobPauseCommand>("pause").WithDescription("Pause a job.");
-        jobs.AddCommand<JobResumeCommand>("resume").WithDescription("Resume a paused job.");
+        jobs.AddCommand<JobPingUrlsCommand>("ping-urls")
+            .WithDescription("Show ping URLs for heartbeat monitors (omit job to list all).")
+            .WithExample("jobs", "ping-urls")
+            .WithExample("jobs", "ping-urls", "nightly-backup");
+        jobs.AddCommand<JobSnippetCommand>("snippet")
+            .WithDescription("Generate integration code that wires a heartbeat monitor into a script or workflow.")
+            .WithExample("jobs", "snippet", "nightly-backup")
+            .WithExample("jobs", "snippet", "nightly-backup", "--lang", "python")
+            .WithExample("jobs", "snippet", "nightly-backup", "--lang", "github-actions");
+        jobs.AddCommand<JobPauseCommand>("pause")
+            .WithDescription("Pause a job, all jobs matching a tag, or every job.")
+            .WithExample("jobs", "pause", "nightly-backup")
+            .WithExample("jobs", "pause", "--tag", "env:staging")
+            .WithExample("jobs", "pause", "--all", "--yes");
+        jobs.AddCommand<JobResumeCommand>("resume")
+            .WithDescription("Resume a paused job, all jobs matching a tag, or every paused job.")
+            .WithExample("jobs", "resume", "nightly-backup")
+            .WithExample("jobs", "resume", "--tag", "env:staging");
         jobs.AddCommand<JobRunNowCommand>("run").WithAlias("run-now").WithDescription("Trigger an HTTP job immediately.");
         jobs.AddCommand<JobDeleteCommand>("delete").WithAlias("rm").WithDescription("Delete a job.");
     });
