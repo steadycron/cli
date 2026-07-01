@@ -6,6 +6,20 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-07-01
+
+### Fixed
+
+- **`logstream` phantom failure events** — logstream could display transient
+  `execution_failure` events that immediately resolved to `execution_success` in the final
+  logbook record. The root cause: the backend mutates the logbook event in-place as an
+  execution progresses (failure → success, same event ID). Polling with `to = now` could
+  return an event in its intermediate failure state; the ID-based deduplication then
+  filtered out the later success update, leaving the wrong state on screen permanently. The
+  live poll window now trails 5 seconds behind the current time so every event has settled
+  to its final state before it is displayed. The effective stream latency (poll interval +
+  5 s) is imperceptible for a monitoring tool.
+
 ## [1.11.0] - 2026-07-01
 
 ### Added
@@ -254,7 +268,8 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/steadycron/cli/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/steadycron/cli/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/steadycron/cli/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/steadycron/cli/compare/v1.8.4...v1.9.0
