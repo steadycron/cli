@@ -29,6 +29,16 @@ public sealed class OutputContext
         });
     }
 
+    /// <summary>Test seam: inject consoles directly (e.g. Spectre.Console.Testing's <c>TestConsole</c>)
+    /// instead of binding to the real <see cref="Console"/> streams.</summary>
+    public OutputContext(bool json, bool quiet, IAnsiConsole @out, IAnsiConsole err)
+    {
+        Json = json;
+        Quiet = quiet;
+        Out = @out;
+        Err = err;
+    }
+
     public bool Json { get; }
 
     public bool Quiet { get; }
@@ -106,6 +116,21 @@ public sealed class OutputContext
     {
         var code = ex.ErrorCode is null ? string.Empty : $" [grey]({Escape(ex.ErrorCode)})[/]";
         Err.MarkupLine($"[red]✗[/] {Escape(ex.Message)}{code}");
+    }
+
+    /// <summary>
+    /// The exact "no credentials configured" block from SPEC-20b §3.4 — deliberately
+    /// undecorated (no ✗/! glyph, unlike <see cref="Error"/>/<see cref="Warn"/>) since none
+    /// appears in the spec's literal text.
+    /// </summary>
+    public void AuthRequiredMessage()
+    {
+        Err.WriteLine("No credentials found.");
+        Err.WriteLine(string.Empty);
+        Err.WriteLine("  New here?           steadycron signup");
+        Err.WriteLine("  Already registered? steadycron login");
+        Err.WriteLine(string.Empty);
+        Err.WriteLine("(exit 4)");
     }
 
     /// <summary>Renders a table/tree etc. as primary output. Suppressed only in <c>--json</c> mode.</summary>

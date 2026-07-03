@@ -6,6 +6,31 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-07-03
+
+### Added
+
+- **`steadycron signup`** — creates an account, verifies your email via a 6-digit code, and
+  provisions a Full-scope API key, entirely in-terminal. No dashboard required. Wrong-code
+  entries show remaining attempts; after 5 wrong guesses, offers `[r]esend`/`[q]uit`. Warns and
+  requires `--force` if a working key is already configured. The key is written straight to the
+  config file and never echoed in full to stdout.
+- **`steadycron login`** — signs an existing account into a new machine: mints a fresh API key
+  and saves it locally, without reading or reusing any other machine's key. Routes an unverified
+  account into the same code-entry flow as `signup`.
+- **`steadycron init`** is now an interactive first-job wizard: pick a heartbeat monitor (for an
+  existing cron job) or a new HTTP job, answer a few prompts, and get a monitored job plus an
+  alert rule in one command. Cron expressions are validated against the live `cron preview`
+  endpoint with a retry loop. Prints the ping-URL snippet inline (see below) for heartbeats.
+- **`steadycron jobs create`** now prints the `&& curl -fsS ...` ping snippet inline for
+  heartbeat monitors (previously only the bare ping URLs), matching `init`'s output.
+
+### Changed
+
+- **`steadycron init`'s previous behavior — generating a boilerplate manifest/Terraform
+  scaffold — has moved to `steadycron manifest scaffold`.** Same flags (`--terraform`, `-o`),
+  same output, new command path. This is a breaking change if you scripted the old `init`.
+
 ## [1.11.1] - 2026-07-01
 
 ### Fixed

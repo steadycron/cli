@@ -95,4 +95,22 @@ public static class JobFormatting
         output.Markup($"  [grey]start  [/]  {Markup.Escape(urls.Start)}");
         output.Markup($"  [grey]fail   [/]  {Markup.Escape(urls.Fail)}");
     }
+
+    /// <summary>
+    /// Prints the "append this to your cron command" block for a newly-created heartbeat
+    /// monitor: the ping URL plus a ready-to-paste <c>&amp;&amp; curl -fsS ...</c> snippet and an
+    /// example crontab line. Shared by <c>jobs create</c> and the <c>init</c> wizard so both
+    /// print byte-identical guidance.
+    /// </summary>
+    public static void RenderPingSnippet(OutputContext output, PingUrls urls, string? cronExpression)
+    {
+        output.Line();
+        output.Markup("Add this to the END of your cron command:");
+        output.Line();
+        output.Markup($"    [grey]&& curl -fsS {Markup.Escape(urls.Success)}[/]");
+        output.Line();
+        output.Markup("Example crontab line:");
+        var schedule = cronExpression ?? "* * * * *";
+        output.Markup($"    [grey]{Markup.Escape(schedule)}  /usr/local/bin/your-script.sh && curl -fsS {Markup.Escape(urls.Success)}[/]");
+    }
 }

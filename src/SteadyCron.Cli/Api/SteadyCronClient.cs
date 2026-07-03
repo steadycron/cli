@@ -14,15 +14,75 @@ public sealed class SteadyCronClient
 {
     private readonly HttpClient _http;
 
-    public SteadyCronClient(HttpClient http, string baseUrl, string apiKey)
+    /// <param name="apiKey">
+    /// Null for the CLI-native signup/login flow, which calls anonymous <c>/api/auth/cli/*</c>
+    /// endpoints before any key exists. Every other use of this client passes a real key.
+    /// </param>
+    public SteadyCronClient(HttpClient http, string baseUrl, string? apiKey)
     {
         _http = http;
         _http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        if (apiKey is not null)
+        {
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
         // API-key requests are exempt from the CSRF header check, but sending it is harmless and
         // keeps parity with the dashboard's mutating requests.
         _http.DefaultRequestHeaders.Add("X-Requested-With", "SteadyCron");
         _http.DefaultRequestHeaders.UserAgent.ParseAdd($"steadycron-cli/{CliVersion.Value}");
+    }
+
+    // ── CLI-native auth ─────────────────────────────────────────────────────────
+    // Every response from /api/auth/cli/* is wrapped in a versioned envelope
+    // ({v, status, error, message, data}). On success this just unwraps `data`; on a non-2xx
+    // response, SendJsonAsync/ReadAsync already throws SteadyCronApiException with ErrorCode
+    // (parsed from the envelope's top-level `error` field) and RawBody — callers that need
+    // extra fields from an error body (e.g. login's `data.signup_id` on 403) read RawBody
+    // themselves rather than this client needing a second, non-throwing code path.
+
+    public async Task<CliSignupData> CliSignupAsync(string email, string password, CancellationToken ct = default)
+    {
+        var envelope = await SendJsonAsync<CliAuthEnvelope<CliSignupData>>(
+            HttpMethod.Post, "api/auth/cli/signup", new { email, password }, ct);
+        return envelope.Data!;
+    }
+
+    public async Task<CliProvisioningData> CliVerifyAsync(Guid signupId, string code, CancellationToken ct = default)
+    {
+        var envelope = await SendJsonAsync<CliAuthEnvelope<CliProvisioningData>>(
+            HttpMethod.Post, "api/auth/cli/verify", new { signup_id = signupId, code }, ct);
+        return envelope.Data!;
+    }
+
+    public async Task<CliProvisioningData> CliLoginAsync(string email, string password, CancellationToken ct = default)
+    {
+        var envelope = await SendJsonAsync<CliAuthEnvelope<CliProvisioningData>>(
+            HttpMethod.Post, "api/auth/cli/login", new { email, password }, ct);
+        return envelope.Data!;
+    }
+
+    public async Task CliResendAsync(Guid signupId, CancellationToken ct = default) =>
+        await SendJsonAsync<CliAuthEnvelope<object?>>(
+            HttpMethod.Post, "api/auth/cli/resend", new { signup_id = signupId }, ct);
+
+    /// <summary>
+    /// Mints an API key from a single-use provisioning token. Builds its own request rather than
+    /// going through this client's own (absent — this client is constructed unauthenticated for
+    /// the signup/login flow) default Authorization header.
+    /// </summary>
+    public async Task<CliProvisionKeyData> CliProvisionKeyAsync(
+        string provisioningToken, string name, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/auth/cli/provision-key")
+        {
+            Content = JsonContent.Create(new { name }, options: SteadyCronJson.Options),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", provisioningToken);
+
+        using var response = await _http.SendAsync(request, ct);
+        var envelope = await ReadAsync<CliAuthEnvelope<CliProvisionKeyData>>(
+            response, HttpMethod.Post, "api/auth/cli/provision-key", ct);
+        return envelope.Data!;
     }
 
     // ── Jobs ────────────────────────────────────────────────────────────────────

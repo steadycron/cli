@@ -27,4 +27,14 @@ public sealed class SteadyCronClientFactory
         var http = _httpClientFactory.CreateClient("steadycron");
         return new SteadyCronClient(http, config.ApiUrl, config.ApiKey!);
     }
+
+    /// <summary>
+    /// Creates a client with no Authorization header, for the CLI-native signup/login flow,
+    /// which calls anonymous <c>/api/auth/cli/*</c> endpoints before any key exists.
+    /// </summary>
+    public SteadyCronClient CreateUnauthenticated(CliConfiguration config)
+    {
+        var http = _httpClientFactory.CreateClient("steadycron");
+        return new SteadyCronClient(http, config.ApiUrl, apiKey: null);
+    }
 }

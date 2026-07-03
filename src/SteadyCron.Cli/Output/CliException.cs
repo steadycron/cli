@@ -6,11 +6,19 @@ namespace SteadyCron.Cli.Output;
 /// </summary>
 public sealed class CliException : Exception
 {
-    public CliException(string message, int exitCode = ExitCodes.Error)
+    public CliException(string message, int exitCode = ExitCodes.Error, bool isAuthRequired = false)
         : base(message)
     {
         ExitCode = exitCode;
+        IsAuthRequired = isAuthRequired;
     }
 
     public int ExitCode { get; }
+
+    /// <summary>
+    /// True for the specific "no credentials configured" case. Rendered via
+    /// <see cref="OutputContext.AuthRequiredMessage"/> (the exact undecorated 3-line block from
+    /// SPEC-20b §3.4) instead of the usual <see cref="OutputContext.Error"/> line.
+    /// </summary>
+    public bool IsAuthRequired { get; }
 }

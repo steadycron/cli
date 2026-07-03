@@ -9,6 +9,7 @@ using SteadyCron.Cli.Commands.Cron;
 using SteadyCron.Cli.Commands.Export;
 using SteadyCron.Cli.Commands.Import;
 using SteadyCron.Cli.Commands.Jobs;
+using SteadyCron.Cli.Commands.Manifest;
 using SteadyCron.Cli.Commands.Rules;
 using SteadyCron.Cli.Commands.Sync;
 using SteadyCron.Cli.Commands.Tags;
@@ -63,11 +64,17 @@ app.Configure(config =>
         .WithExample("logbook", "--job", "my-job-key")
         .WithExample("logbook", "--all", "--json");
 
-    config.AddCommand<InitCommand>("init")
-        .WithDescription("Generate a fully documented boilerplate manifest (or Terraform HCL) covering every SteadyCron feature.")
-        .WithExample("init")
-        .WithExample("init", "-o", "steadycron.yaml")
-        .WithExample("init", "--terraform", "-o", "steadycron.tf");
+    config.AddCommand<SignupCommand>("signup")
+        .WithDescription("Create an account, verify your email, and provision an API key — entirely in-terminal.")
+        .WithExample("signup");
+
+    config.AddCommand<LoginCommand>("login")
+        .WithDescription("Sign in on a new machine: mints a fresh API key and saves it locally.")
+        .WithExample("login");
+
+    config.AddCommand<InitWizardCommand>("init")
+        .WithDescription("Interactive first-job wizard: create your first monitored job in one command.")
+        .WithExample("init");
 
     config.AddCommand<ValidateCommand>("validate")
         .WithDescription("Validate a manifest locally (schema + cross-references, no API calls).")
@@ -111,6 +118,16 @@ app.Configure(config =>
             .WithExample("import", "vercel", "--base-url", "https://app.example.com", "-o", "steadycron.yaml")
             .WithExample("import", "vercel", "--base-url", "https://app.example.com",
                 "--cron-secret-env", "VERCEL_CRON_SECRET");
+    });
+
+    config.AddBranch("manifest", manifest =>
+    {
+        manifest.SetDescription("Generate manifest boilerplate.");
+        manifest.AddCommand<InitCommand>("scaffold")
+            .WithDescription("Generate a fully documented boilerplate manifest (or Terraform HCL) covering every SteadyCron feature.")
+            .WithExample("manifest", "scaffold")
+            .WithExample("manifest", "scaffold", "-o", "steadycron.yaml")
+            .WithExample("manifest", "scaffold", "--terraform", "-o", "steadycron.tf");
     });
 
     config.AddBranch("jobs", jobs =>

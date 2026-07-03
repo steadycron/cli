@@ -138,10 +138,7 @@ public sealed class JobCreateCommand : SteadyCronCommandBase<JobCreateSettings>
         output.Success($"Created {job.Kind} job '{job.Name}' ({job.Id}).");
         if (job.PingUrls is { } ping)
         {
-            output.Line();
-            output.Markup($"  [grey]ping (success):[/] {OutputContext.Escape(ping.Success)}");
-            output.Markup($"  [grey]ping (start):[/]   {OutputContext.Escape(ping.Start)}");
-            output.Markup($"  [grey]ping (fail):[/]    {OutputContext.Escape(ping.Fail)}");
+            JobFormatting.RenderPingSnippet(output, ping, job.CronExpression);
         }
 
         if (job.PausedReason == JobFormatting.UnverifiedEmailPauseReason)

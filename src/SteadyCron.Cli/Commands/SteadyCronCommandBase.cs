@@ -39,7 +39,15 @@ public abstract class SteadyCronCommandBase<TSettings> : AsyncCommand<TSettings>
         }
         catch (CliException ex)
         {
-            output.Error(ex.Message);
+            if (ex.IsAuthRequired)
+            {
+                output.AuthRequiredMessage();
+            }
+            else
+            {
+                output.Error(ex.Message);
+            }
+
             return ex.ExitCode;
         }
         catch (ManifestException ex)
@@ -76,9 +84,9 @@ public abstract class SteadyCronCommandBase<TSettings> : AsyncCommand<TSettings>
         if (!config.HasApiKey)
         {
             throw new CliException(
-                "No API key configured. Set the STEADYCRON_API_KEY environment variable, pass --api-key, " +
-                "or run `steadycron config set --api-key sc_...`.",
-                ExitCodes.AuthError);
+                "No credentials configured.",
+                ExitCodes.AuthError,
+                isAuthRequired: true);
         }
 
         return ClientFactory.Create(config);

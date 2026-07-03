@@ -92,6 +92,112 @@ public sealed class SteadyCronClientTests
         Assert.True(ex.IsAuthError);
     }
 
+    // ── CLI-native auth ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Unauthenticated_client_sends_no_authorization_header()
+    {
+        HttpRequestMessage? captured = null;
+        var handler = new StubHandler((req, _) =>
+        {
+            captured = req;
+            return Task.FromResult(Json(HttpStatusCode.OK,
+                """{"v":1,"status":"ok","data":{"signup_id":"0192a4e0-0000-7000-8000-000000000001"}}"""));
+        });
+
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+        await client.CliSignupAsync("a@example.com", "hunter2hunter2");
+
+        Assert.NotNull(captured);
+        Assert.Null(captured!.Headers.Authorization);
+    }
+
+    [Fact]
+    public async Task CliSignupAsync_unwraps_envelope_data()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Json(HttpStatusCode.OK,
+            """{"v":1,"status":"ok","data":{"signup_id":"0192a4e0-0000-7000-8000-000000000001","dev_code":"482913"}}""")));
+
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+        var data = await client.CliSignupAsync("a@example.com", "hunter2hunter2");
+
+        Assert.Equal(Guid.Parse("0192a4e0-0000-7000-8000-000000000001"), data.SignupId);
+    }
+
+    [Fact]
+    public async Task CliVerifyAsync_sendsSignupIdAndCode_unwrapsProvisioningToken()
+    {
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var handler = new StubHandler(async (req, ct) =>
+        {
+            captured = req;
+            body = req.Content is null ? null : await req.Content.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK,
+                """{"v":1,"status":"ok","data":{"provisioning_token":"scpt_abc","expires_in":300}}""");
+        });
+
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+        var data = await client.CliVerifyAsync(Guid.Parse("0192a4e0-0000-7000-8000-000000000001"), "482913");
+
+        Assert.Equal("https://api.steadycron.com/api/auth/cli/verify", captured!.RequestUri!.ToString());
+        Assert.Contains("\"signup_id\":\"0192a4e0-0000-7000-8000-000000000001\"", body);
+        Assert.Contains("\"code\":\"482913\"", body);
+        Assert.Equal("scpt_abc", data.ProvisioningToken);
+        Assert.Equal(300, data.ExpiresIn);
+    }
+
+    [Fact]
+    public async Task CliLoginAsync_unwraps_envelope_data()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Json(HttpStatusCode.OK,
+            """{"v":1,"status":"ok","data":{"provisioning_token":"scpt_xyz","expires_in":300}}""")));
+
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+        var data = await client.CliLoginAsync("a@example.com", "hunter2hunter2");
+
+        Assert.Equal("scpt_xyz", data.ProvisioningToken);
+    }
+
+    [Fact]
+    public async Task CliLoginAsync_unverified_throws_withSignupIdRecoverableFromRawBody()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Json((HttpStatusCode)403,
+            """{"v":1,"status":"error","error":"email_not_verified","message":"Verify your email.","data":{"signup_id":"0192a4e0-0000-7000-8000-000000000001"}}""")));
+
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+
+        var ex = await Assert.ThrowsAsync<SteadyCronApiException>(
+            () => client.CliLoginAsync("a@example.com", "hunter2hunter2"));
+
+        Assert.Equal("email_not_verified", ex.ErrorCode);
+        Assert.NotNull(ex.RawBody);
+        using var doc = JsonDocument.Parse(ex.RawBody!);
+        var signupId = doc.RootElement.GetProperty("data").GetProperty("signup_id").GetGuid();
+        Assert.Equal(Guid.Parse("0192a4e0-0000-7000-8000-000000000001"), signupId);
+    }
+
+    [Fact]
+    public async Task CliProvisionKeyAsync_sendsProvisioningTokenAsBearer_notClientsOwnKey()
+    {
+        HttpRequestMessage? captured = null;
+        var handler = new StubHandler((req, _) =>
+        {
+            captured = req;
+            return Task.FromResult(Json(HttpStatusCode.OK,
+                """{"v":1,"status":"ok","data":{"api_key":"sc_newkey","key_prefix":"sc_newkey12","account_plan":"free"}}"""));
+        });
+
+        // Constructed unauthenticated — the provisioning token must still reach the server.
+        var client = new SteadyCronClient(new HttpClient(handler), "https://api.steadycron.com", apiKey: null);
+        var data = await client.CliProvisionKeyAsync("scpt_provisioning-token", "cli-myhost");
+
+        Assert.Equal("Bearer", captured!.Headers.Authorization!.Scheme);
+        Assert.Equal("scpt_provisioning-token", captured.Headers.Authorization.Parameter);
+        Assert.Equal("sc_newkey", data.ApiKey);
+        Assert.Equal("free", data.AccountPlan);
+    }
+
     private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json"),
