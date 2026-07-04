@@ -40,6 +40,23 @@ public sealed record ConfigFile
         return Path.Combine(configRoot, "steadycron", "config.json");
     }
 
+    /// <summary>
+    /// Shortens the user's home directory to <c>~</c> for display (Unix only — Windows shows the
+    /// expanded <c>%APPDATA%</c> path verbatim, since <c>~</c> isn't a familiar shorthand there).
+    /// </summary>
+    public static string Abbreviate(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return path;
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return !string.IsNullOrEmpty(home) && path.StartsWith(home, StringComparison.Ordinal)
+            ? "~" + path[home.Length..]
+            : path;
+    }
+
     /// <summary>Loads the config file if it exists; returns null when absent. Throws on malformed JSON.</summary>
     public static ConfigFile? Load(string path)
     {

@@ -36,7 +36,7 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
         Row("job_key", job.JobKey);
         Row("name", job.Name);
         Row("kind", job.Kind);
-        grid.AddRow("[grey]status[/]", JobFormatting.StatusMarkup(job.Status));
+        grid.AddRow("[grey]status[/]", JobFormatting.StatusMarkup(job));
         if (job.PausedReason is not null)
         {
             Row("paused_reason", job.PausedReason);

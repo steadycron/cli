@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Spectre.Console;
 using Spectre.Console.Cli;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
@@ -60,29 +59,7 @@ public sealed class JobsListCommand : SteadyCronCommandBase<JobsListSettings>
             return ExitCodes.Ok;
         }
 
-        var table = new Table().Border(TableBorder.Rounded).Expand();
-        table.AddColumn("Name");
-        table.AddColumn("Kind");
-        table.AddColumn("Status");
-        table.AddColumn("Schedule");
-        table.AddColumn("Next run");
-        table.AddColumn("Last run");
-        table.AddColumn(new TableColumn("Job key").NoWrap());
-
-        foreach (var job in items)
-        {
-            table.AddRow(
-                Markup.Escape(job.Name),
-                Markup.Escape(job.Kind),
-                JobFormatting.StatusMarkup(job.Status),
-                Markup.Escape(JobFormatting.ScheduleWithTz(job)),
-                Markup.Escape(job.Kind == "http" ? JobFormatting.When(job.NextFireAt) : "—"),
-                Markup.Escape(JobFormatting.When(job.LastFireAt)),
-                Markup.Escape(job.JobKey ?? "—"));
-        }
-
-        output.Render(table);
-        output.Info($"{items.Count} job(s).");
+        JobFormatting.RenderJobsTable(output, items);
 
         if (items.Any(j => j.PausedReason == JobFormatting.UnverifiedEmailPauseReason))
         {

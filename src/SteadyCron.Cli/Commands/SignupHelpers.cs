@@ -92,7 +92,7 @@ internal static class SignupHelpers
         merged.Save(path);
 
         // Never echo the full key — only its masked prefix, matching `config show`'s convention.
-        output.Success($"API key created ({keyName}, scope: full) and saved to {path}.");
+        output.Success($"API key created ({keyName}, scope: full) and saved to {ConfigFile.Abbreviate(path)}.");
     }
 
     /// <summary>Recovers <c>data.signup_id</c> from a 403 <c>email_not_verified</c> error body.</summary>

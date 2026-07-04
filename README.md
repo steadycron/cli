@@ -5,85 +5,105 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/steadycron/cli/blob/main/LICENSE)
 
 The official command-line interface for [SteadyCron](https://steadycron.com) — schedule, run, and
-monitor cron jobs as code. Declare your entire account — jobs, heartbeat monitors, alert channels,
-tags, variables — in a YAML manifest, commit it to your repo, and reconcile with a single command:
+monitor cron jobs as code. Everything works from the terminal: account creation, your first
+monitored job, day-to-day management, and a full manifest-as-code workflow. No dashboard required.
 
 ```bash
-steadycron sync steadycron.yaml --namespace prod
+dotnet tool install -g steadycron
+steadycron signup
+steadycron init
 ```
+
+## Contents
+
+- [Quickstart](#quickstart)
+- [Install](#install)
+- [Authenticate](#authenticate)
+- [Your first job: `init`](#your-first-job-init)
+- [Day-to-day commands](#day-to-day-commands)
+- [Cron as code](#cron-as-code)
+  - [The v2 manifest](#the-v2-manifest)
+  - [Interpolation, secrets, and `.env` files](#two-interpolation-mechanisms)
+  - [Workflow: validate → plan → apply](#workflow-validate--plan--apply)
+  - [`export` and restoring to another account](#export--pull-the-current-account-state-as-a-manifest)
+  - [`manifest scaffold`](#manifest-scaffold--boilerplate-manifest-generator)
+  - [Importing existing schedules](#importing-existing-schedules)
+  - [CI: plan on PRs, apply on merge](#cron-and-monitoring-as-code-in-ci)
+- [Activity reports](#activity-reports)
+- [Logbook](#logbook)
+- [Exit codes](#exit-codes)
+- [Development](#development)
 
 ## Quickstart
 
-From nothing to a protected cron job, entirely in your terminal — no dashboard, no browser:
-
-```bash
-# 1. Install
-dotnet tool install -g steadycron
-
-# 2. Create an account, verify your email, and provision an API key
-steadycron signup
-
-# 3. Create your first monitored job (interactive wizard)
-steadycron init
-
-# 4. Confirm it's there
-steadycron jobs list
-```
-
-Walked through in full:
+From nothing to a protected cron job, entirely in your terminal:
 
 ```
 $ dotnet tool install -g steadycron
+
 $ steadycron signup
 Email: dan@example.com
 Password: ********
 ✓ Account created. Verification code sent to dan@example.com.
 Enter 6-digit code: 482913
 ✓ Email verified.
-✓ API key created (cli-dans-laptop, scope: full) and saved to ~/.config/steadycron/config
-✓ A default email alert channel was set up for dan@example.com.
+✓ API key created (cli-dans-laptop, scope: full) → saved to ~/.config/steadycron/config.json
+✓ Default email alert channel set up for dan@example.com.
 
-Next: run `steadycron init` to create your first monitored job.
+Next: steadycron init — create your first monitored job.
 
 $ steadycron init
 ? What do you want to do?
   › Monitor an existing cron job (heartbeat)
     Schedule a new HTTP job (we call your URL)
+    Skip — just set up the manifest workflow
 
 ? Job name: nightly-backup
-? Timezone [UTC]: Europe/Berlin
-? Expected schedule (cron, e.g. "0 2 * * *"): 0 2 * * *
-? Grace period seconds [1800]:
+? Expected schedule (cron) [*/15 * * * *]: 0 2 * * *
+? Timezone:
+  › UTC
+    Local (Europe/Berlin)
+    Other…
+  Next fires: 2026-07-05 02:00, 2026-07-06 02:00, 2026-07-07 02:00 (UTC)
+? Grace period seconds [3600]:
 
-✓ Created heartbeat monitor nightly-backup
-✓ Alert rule: missed heartbeat → Email (default) → dan@example.com
+✓ Created heartbeat monitor nightly-backup.
+✓ If a ping doesn't arrive on time, we'll email dan@example.com.
 
-Add this to the END of your cron command:
+┌────────────────┬───────────┬──────────────────┬────────────────┬──────────┐
+│ Name           │ Kind      │ Status           │ Schedule       │ Next run │
+├────────────────┼───────────┼──────────────────┼────────────────┼──────────┤
+│ nightly-backup │ heartbeat │ waiting for ping │ 0 2 * * * UTC  │ —        │
+└────────────────┴───────────┴──────────────────┴────────────────┴──────────┘
+1 job. Check status anytime: steadycron jobs get nightly-backup
+
+Add this to the end of your cron command:
 
     && curl -fsS https://ping.steadycron.com/<token>
 
-Waiting for your first ping — check anytime with:
-    steadycron jobs get nightly-backup
+Example crontab line:
+    0 2 * * *  /usr/local/bin/backup.sh && curl -fsS https://ping.steadycron.com/<token>
+Other schedulers (systemd, Docker, Kubernetes, Windows): https://steadycron.com/docs/ping-recipes
 
-$ steadycron jobs list
-┌───────────────┬───────────┬────────┬─────────────────┬──────────┐
-│ Name          │ Kind      │ Status │ Schedule        │ Job key  │
-├───────────────┼───────────┼────────┼─────────────────┼──────────┤
-│ nightly-backup│ heartbeat │ new    │ 0 2 * * * (…)   │ nightly… │
-└───────────────┴───────────┴────────┴─────────────────┴──────────┘
+✓ Wrote steadycron.yaml — your account as code (1 job, 1 channel, 1 rule)
+✓ Wrote steadycron_example.yaml — reference for every manifest feature
+
+Manage everything as code:
+  1. Add or edit jobs in steadycron.yaml
+  2. steadycron validate steadycron.yaml    check locally, no API
+  3. steadycron plan steadycron.yaml        preview changes
+  4. steadycron apply steadycron.yaml       sync to your account
 ```
 
-Already have an account? Skip straight to `steadycron login` — it mints a fresh key for this
-machine without touching any other machine's key. Full auth details are under
-[Authenticate](#authenticate) below.
+That's the whole product in one session: a monitored job, alerting to your inbox, and your
+account exported as a version-controllable manifest.
 
-From here, keep managing things one-off (`steadycron init` again for the next job, or the direct
-commands under [Managing resources directly](#managing-resources-directly) — `jobs create`,
-`rules add`, `channels create`, `tags create`, …), or graduate to **manifest-as-code**: run
-`steadycron export` to snapshot your account into a YAML manifest, commit it, and reconcile with
-`steadycron sync` from then on (see [The v2 manifest](#the-v2-manifest) and
-[Cron and monitoring as code in CI](#cron-and-monitoring-as-code-in-ci)). Both approaches operate
-on the same account — mix them freely.
+Already have an account? `steadycron login` mints a fresh key for this machine without touching
+any other machine's key — see [Authenticate](#authenticate).
+
+From here, either keep managing resources one-off ([Day-to-day commands](#day-to-day-commands))
+or commit `steadycron.yaml` and manage everything through `plan`/`apply`
+([Cron as code](#cron-as-code)). Both operate on the same account — mix them freely.
 
 ## Install
 
@@ -109,30 +129,32 @@ curl -Lo steadycron https://github.com/steadycron/cli/releases/latest/download/s
 chmod +x steadycron && sudo mv steadycron /usr/local/bin/
 ```
 
+Binaries are available for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
+
 ## Authenticate
 
 New to SteadyCron? Create an account, verify your email, and provision an API key — entirely
-in-terminal, no dashboard required:
+in-terminal:
 
 ```bash
 steadycron signup
 ```
 
-```
-$ steadycron signup
-Email: dan@example.com
-Password: ********
-✓ Account created. Verification code sent to dan@example.com.
-Enter 6-digit code: 482913
-✓ Email verified.
-✓ API key created (cli-<hostname>, scope: full) and saved to ~/.config/steadycron/config
-✓ A default email alert channel was set up for dan@example.com.
+The full transcript is in the [Quickstart](#quickstart). What it does: creates the account,
+verifies your email with a 6-digit code, mints a full-scope API key named `cli-<hostname>`, saves
+it to the config file, and sets up a default email alert channel pointing at your address.
 
-Next: run `steadycron init` to create your first monitored job.
+**Config file location:** `~/.config/steadycron/config.json` on Linux/macOS,
+`%APPDATA%\steadycron\config.json` on Windows.
+
+Already have an account? Sign in on a new machine:
+
+```bash
+steadycron login
 ```
 
-Already have an account? Sign in on a new machine with `steadycron login` — it mints a fresh key
-for this machine and never touches or reveals any other machine's key.
+`login` mints a fresh key for this machine and never touches or reveals any other machine's key.
+Stale `cli-*` keys can be revoked from the dashboard if you ever want to clean up.
 
 Prefer to create a key from the dashboard instead? Create one under **Settings → API keys**, then
 provide it via an environment variable:
@@ -155,11 +177,96 @@ steadycron config show --check   # verify connectivity
 > A **read-only** key can run `export`, `validate`, and read-only sub-commands.
 > Mutating commands (`apply`, `sync`, `jobs create/pause/delete`, etc.) require a **full** key.
 
-## The v2 manifest
+## Your first job: `init`
 
-A manifest declares your whole account as code: channels, tags, variables, jobs, and heartbeat
-monitors. The server reconciles from this single source of truth — every schedule, alert rule,
-and monitoring configuration is version-controlled and reviewable in a pull request.
+`steadycron init` is an interactive wizard that creates your first monitored job — a heartbeat
+monitor for an existing cron job, or a new HTTP job SteadyCron calls on a schedule — plus a
+default alert rule. The full transcript is in the [Quickstart](#quickstart).
+
+What the wizard gives you:
+
+- **Sensible defaults everywhere** — schedule prefills `*/15 * * * *`, the grace period is derived
+  from your schedule, and timezone is a selector (UTC / your local timezone / manual entry).
+  Enter-through works for a quick test job.
+- **A next-fires preview** in your chosen timezone before anything is created.
+- **Plain-language alerting** — the default rule emails your verified address on a missed ping
+  (heartbeat) or failed run (HTTP). Add more channels later with `channels create` + `rules add`.
+- **The ping snippet** for heartbeats, with a platform-matched scheduler example and a pointer to
+  [ping recipes](https://steadycron.com/docs/ping-recipes) for systemd, Docker, Kubernetes, and
+  Windows Task Scheduler.
+- **Two manifest files** written to the current directory (never overwriting existing files):
+  - `steadycron.yaml` — a live export of your account, immediately usable with `plan`/`apply`
+  - `steadycron_example.yaml` — a fully commented reference covering every manifest feature
+
+The third wizard option, **Skip**, creates nothing but still writes both manifest files — the
+fastest way to start manifest-first on an empty account.
+
+`init` requires a configured API key (`signup`/`login`/`config set` first) and an interactive
+terminal. Run it again anytime to add another job.
+
+## Day-to-day commands
+
+Commands that accept a `<JOB>` argument resolve it in order: GUID → job key → exact name. Job
+keys are shown in `jobs list` (Key column) and are stable across renames — prefer them over
+names in scripts.
+
+```bash
+steadycron jobs list                          # table of all jobs with their job keys
+steadycron jobs list --kind heartbeat --status missed
+steadycron jobs get my-job-key                # by job key (preferred), name, or id
+steadycron jobs logs my-job-key -n 20
+steadycron jobs pause my-job-key
+steadycron jobs resume my-job-key
+steadycron jobs run my-job-key
+steadycron jobs delete old-job-key --yes
+
+steadycron jobs create --name warm-cache --url https://api.myapp.com/warm \
+  --method GET --interval 900 --skip-if-running
+
+steadycron cron preview "*/15 9-17 * * 1-5" --timezone Europe/Berlin
+
+steadycron tags list
+steadycron tags create env prod --color green
+
+steadycron vars list
+steadycron vars set digest_token "sk_live_…"
+
+steadycron channels list
+steadycron channels create --name "Ops email" --kind email --to ops@example.com
+
+steadycron rules list nightly-db-backup        # shows trigger, severity, channel kind and target
+steadycron rules add nightly-db-backup \
+  --channel "Ops email" --trigger missed_heartbeat --severity p1
+steadycron rules test nightly-db-backup        # fires a test alert on every channel for the job
+steadycron rules delete <rule-id>
+```
+
+`rules test` sends one notification per unique channel (even if multiple triggers point at the
+same channel) and exits non-zero if any delivery fails — useful for verifying a new channel
+configuration from CI or a script.
+
+Add `--json` to any command for machine-readable output.
+
+## Cron as code
+
+One-off commands are fine for getting started; the manifest is how you run SteadyCron for real.
+Declare your entire account — jobs, heartbeat monitors, alert channels, tags, variables — in a
+YAML file, commit it, and reconcile with a single command:
+
+```bash
+steadycron sync steadycron.yaml --namespace prod
+```
+
+You already have a starting manifest: `init` wrote `steadycron.yaml` (your live account) and
+`steadycron_example.yaml` (annotated reference). Or generate either from scratch — see
+[`export`](#export--pull-the-current-account-state-as-a-manifest) and
+[`manifest scaffold`](#manifest-scaffold--boilerplate-manifest-generator).
+
+### The v2 manifest
+
+A manifest declares your whole account as code. The server reconciles from this single source of
+truth — every schedule, alert rule, and monitoring configuration is version-controlled and
+reviewable in a pull request.
 
 ```yaml
 # examples/steadycron.yaml
@@ -208,13 +315,8 @@ jobs:
     grace: 1800
 ```
 
-See [`examples/steadycron.yaml`](examples/steadycron.yaml) for the complete field reference.
-
-To generate a fully commented boilerplate manifest covering every field, run:
-
-```bash
-steadycron manifest scaffold -o steadycron.yaml
-```
+See [`examples/steadycron.yaml`](examples/steadycron.yaml) for the complete field reference, or
+run `steadycron manifest scaffold` for a fully commented boilerplate.
 
 ### Two interpolation mechanisms
 
@@ -361,6 +463,32 @@ steadycron apply manifests/channels.yaml manifests/jobs.yaml --namespace prod
 When multiple files are used, they must agree on `version` and `namespace`. Duplicate resource `id`
 values across files are an error.
 
+### `manifest scaffold` — boilerplate manifest generator
+
+`steadycron manifest scaffold` generates a fully documented boilerplate manifest (or Terraform
+HCL) that covers every SteadyCron feature. Use it to get started without reading the docs or
+creating resources in the dashboard first.
+
+```bash
+steadycron manifest scaffold                          # print documented YAML to stdout
+steadycron manifest scaffold -o steadycron.yaml       # write to file (refuses to overwrite)
+steadycron manifest scaffold --terraform              # Terraform HCL instead of YAML
+steadycron manifest scaffold --terraform -o main.tf   # write Terraform boilerplate to file
+```
+
+The generated manifest includes a namespace, template variables with `${ENV_VAR}` explanation,
+tags, all five alert channel kinds (email, Slack, webhook, Discord, Telegram), a fully annotated
+HTTP job (every field), a heartbeat monitor, and inline alert rules. Every field has a comment
+explaining what it does and listing valid values. Delete the sections you don't need, then run
+`steadycron plan steadycron.yaml` to preview.
+
+The Terraform boilerplate uses the exact resource and attribute names from the live
+`steadycron/steadycron` provider — `steadycron_http_job`, `steadycron_heartbeat_monitor`,
+`steadycron_alert_channel`, `steadycron_alert_rule`, `steadycron_tag`, and
+`steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
+
+`manifest scaffold` requires no API key and no configuration — run it any time.
+
 ## Importing existing schedules
 
 `import` generates a v2 manifest from a crontab or `vercel.json` file — client-side only, no API
@@ -473,63 +601,6 @@ steadycron apply steadycron.yaml --env-file secrets.env --namespace prod
 After migrating, you can tighten schedules and set per-job timezones — capabilities Vercel doesn't
 expose.
 
-## Starting from scratch: `init`
-
-`steadycron init` is an interactive wizard that creates your first monitored job in one command
-— a heartbeat monitor for an existing cron job, or a new HTTP job SteadyCron calls on a schedule
-— plus a default alert rule, entirely from prompts:
-
-```
-$ steadycron init
-? What do you want to do?
-  › Monitor an existing cron job (heartbeat)      ← default
-    Schedule a new HTTP job (we call your URL)
-
-? Job name: nightly-backup
-? Expected schedule (cron, e.g. "0 2 * * *"): 0 2 * * *
-? Timezone [UTC]: Europe/Berlin
-? Grace period seconds [1800]:
-
-✓ Created heartbeat monitor nightly-backup
-✓ Alert rule: missed heartbeat → Email (default) → dan@example.com
-
-Add this to the END of your cron command:
-
-    && curl -fsS https://ping.steadycron.com/<token>
-
-Waiting for your first ping — check anytime with:
-    steadycron jobs get nightly-backup
-```
-
-`init` requires a configured API key (`steadycron signup`/`login`/`config set` first) and an
-interactive terminal.
-
-### `manifest scaffold` — boilerplate manifest generator
-
-`steadycron manifest scaffold` generates a fully documented boilerplate manifest (or Terraform
-HCL) that covers every SteadyCron feature. Use it to get started without reading the docs or
-creating resources in the dashboard first.
-
-```bash
-steadycron manifest scaffold                          # print documented YAML to stdout
-steadycron manifest scaffold -o steadycron.yaml       # write to file (refuses to overwrite)
-steadycron manifest scaffold --terraform              # Terraform HCL instead of YAML
-steadycron manifest scaffold --terraform -o main.tf   # write Terraform boilerplate to file
-```
-
-The generated manifest includes a namespace, template variables with `${ENV_VAR}` explanation,
-tags, all five alert channel kinds (email, Slack, webhook, Discord, Telegram), a fully annotated
-HTTP job (every field), a heartbeat monitor, and inline alert rules. Every field has a comment
-explaining what it does and listing valid values. Delete the sections you don't need, then run
-`steadycron plan steadycron.yaml` to preview.
-
-The Terraform boilerplate uses the exact resource and attribute names from the live
-`steadycron/steadycron` provider — `steadycron_http_job`, `steadycron_heartbeat_monitor`,
-`steadycron_alert_channel`, `steadycron_alert_rule`, `steadycron_tag`, and
-`steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
-
-`manifest scaffold` requires no API key and no configuration — run it any time.
-
 ## Cron and monitoring as code in CI
 
 Add the SteadyCron GitHub Action to plan on pull requests and apply on merge:
@@ -634,49 +705,6 @@ Mirrors the web Logbook page. Available `--domain` values:
 name, or id. `--all` pages through all results; omitting it returns the first `--page-size`
 events (default 50, max 100). `--verbose` shows every metadata field per event (HTTP status,
 error type, response excerpt, source IP, etc.).
-
-## Managing resources directly
-
-Commands that accept a `<JOB>` argument resolve it in order: GUID → job key → exact name. Job
-keys are shown in `jobs list` (Key column) and are stable across renames — prefer them over
-names in scripts.
-
-```bash
-steadycron jobs list                          # table of all jobs with their job keys
-steadycron jobs list --kind heartbeat --status missed
-steadycron jobs get my-job-key                # by job key (preferred), name, or id
-steadycron jobs logs my-job-key -n 20
-steadycron jobs pause my-job-key
-steadycron jobs resume my-job-key
-steadycron jobs run my-job-key
-steadycron jobs delete old-job-key --yes
-
-steadycron jobs create --name warm-cache --url https://api.myapp.com/warm \
-  --method GET --interval 900 --skip-if-running
-
-steadycron cron preview "*/15 9-17 * * 1-5" --timezone Europe/Berlin
-
-steadycron tags list
-steadycron tags create env prod --color green
-
-steadycron vars list
-steadycron vars set digest_token "sk_live_…"
-
-steadycron channels list
-steadycron channels create --name "Ops email" --kind email --to ops@example.com
-
-steadycron rules list nightly-db-backup        # shows trigger, severity, channel kind and target
-steadycron rules add nightly-db-backup \
-  --channel "Ops email" --trigger missed_heartbeat --severity p1
-steadycron rules test nightly-db-backup        # fires a test alert on every channel for the job
-steadycron rules delete <rule-id>
-```
-
-`rules test` sends one notification per unique channel (even if multiple triggers point at the
-same channel) and exits non-zero if any delivery fails — useful for verifying a new channel
-configuration from CI or a script.
-
-Add `--json` to any command for machine-readable output.
 
 ## Exit codes
 

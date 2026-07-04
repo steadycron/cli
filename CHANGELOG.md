@@ -6,6 +6,53 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-04
+
+### Added
+
+- **`steadycron init` kind selector gained a `Skip` option** — sets up `steadycron.yaml` /
+  `steadycron_example.yaml` and prints the "manage as code" workflow block without creating a
+  job, for anyone who wants to hand-write their manifest from the start.
+- **`steadycron init` timezone prompt is now a selector**: `UTC` (default), `Local` (your
+  machine's detected IANA zone, hidden if it can't be detected reliably), or `Other…` (free text,
+  validated against the same timezone list the server accepts).
+- **`steadycron init`'s heartbeat schedule prompt now defaults to `*/15 * * * *`** (Enter
+  accepts it), and the grace-period default is now derived from the schedule itself — 300s for
+  sub-hourly schedules, 1800s for sub-daily, 3600s for daily-or-slower — instead of a flat 1800s
+  for everything.
+- **`steadycron init` now writes `steadycron.yaml` and `steadycron_example.yaml`** to the current
+  directory at the end of every run (including `Skip`): `steadycron.yaml` is your live account
+  exported as a manifest (immediately reconcilable — it already contains the job you just
+  created); `steadycron_example.yaml` is the annotated cheat sheet. Neither file is ever
+  overwritten if it already exists. A closing block shows the four-command "manage everything as
+  code" workflow (`validate` / `plan` / `apply`).
+- **`steadycron init`'s post-create summary** now shows the job in the same table `jobs list`
+  uses, confirms the actual alert destination (e.g. "If a ping doesn't arrive on time, we'll
+  email ops@example.com.") instead of generic wording, and — for heartbeats — prints one
+  platform-detected ping snippet (crontab append on Linux/macOS, a PowerShell one-liner on
+  Windows) plus a link to the new [ping recipes](https://steadycron.com/docs/ping-recipes) docs
+  page for every other scheduler.
+- **`steadycron signup`** now validates the email format client-side before calling the API, and
+  prints the saved config path abbreviated to `~/...` on Linux/macOS.
+
+### Changed
+
+- **Output styling pass across `signup`/`init`/`jobs create`**: the ping snippet, next-fires
+  preview, and IaC commands no longer render grey/dim — they were previously easy to miss even
+  though they're the most important lines in the flow. Commands render cyan; the ping snippet
+  renders bold green.
+- **`jobs list` / `jobs get` / `init`'s post-create table**: a job that has never fired now shows
+  "waiting for ping" (heartbeat) or "awaiting first run" (HTTP) in amber instead of a plain grey
+  "new" — the underlying API status is unchanged, this is display-only. The job-count footer now
+  reads "1 job." / "3 jobs." instead of "N job(s)."
+- **`manifest scaffold`'s generated cheat sheet** had three schema bugs, now fixed: the Slack
+  channel example used `{{template_var}}` substitution, which channel config never supports (now
+  `${SLACK_WEBHOOK_URL}`, matching real `--env-file` usage); the `shaping:` example used fields
+  that don't exist (`max_concurrent_jobs`/`max_jobs_per_minute`) instead of the real schema
+  (`quiet_hours`/`aggregation`/`escalation`/`flapping`); `HEAD` was listed as a valid HTTP method
+  but isn't. The triggers list now also documents `on_slow_run` and `on_size_anomaly`. A new test
+  runs the generated cheat sheet through `steadycron validate` in CI so it can't drift again.
+
 ## [1.12.0] - 2026-07-03
 
 ### Added
@@ -293,7 +340,9 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/steadycron/cli/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/steadycron/cli/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/steadycron/cli/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/steadycron/cli/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/steadycron/cli/compare/v1.9.0...v1.10.0

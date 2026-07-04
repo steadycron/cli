@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SteadyCron.Cli.Api;
@@ -40,7 +41,7 @@ public sealed class SignupCommand : SteadyCronCommandBase<SignupSettings>
 
         var client = ClientFactory.CreateUnauthenticated(config);
 
-        var email = output.Out.Prompt(new TextPrompt<string>("Email:"));
+        var email = PromptEmail(output);
         var password = PromptPassword(output);
 
         var signup = await SignupHelpers.SignupOrSuggestLoginAsync(client, email, password, ct);
@@ -55,9 +56,23 @@ public sealed class SignupCommand : SteadyCronCommandBase<SignupSettings>
 
         output.Success($"A default email alert channel was set up for {email}.");
         output.Line();
-        output.Markup("Next: run `[bold]steadycron init[/]` to create your first monitored job.");
+        output.Markup("Next: [cyan]steadycron init[/] — create your first monitored job.");
 
         return ExitCodes.Ok;
+    }
+
+    private static string PromptEmail(OutputContext output)
+    {
+        while (true)
+        {
+            var email = output.Out.Prompt(new TextPrompt<string>("Email:"));
+            if (MailAddress.TryCreate(email, out _))
+            {
+                return email;
+            }
+
+            output.Warn($"'{email}' doesn't look like a valid email address.");
+        }
     }
 
     private static string PromptPassword(OutputContext output)
