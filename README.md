@@ -27,6 +27,7 @@ steadycron init
   - [Workflow: validate → plan → apply](#workflow-validate--plan--apply)
   - [`export` and restoring to another account](#export--pull-the-current-account-state-as-a-manifest)
   - [`manifest scaffold`](#manifest-scaffold--boilerplate-manifest-generator)
+  - [`manifest add`](#manifest-add--append-a-resource-to-an-existing-manifest)
   - [Importing existing schedules](#importing-existing-schedules)
   - [CI: plan on PRs, apply on merge](#cron-and-monitoring-as-code-in-ci)
 - [Activity reports](#activity-reports)
@@ -197,12 +198,21 @@ What the wizard gives you:
 - **Two manifest files** written to the current directory (never overwriting existing files):
   - `steadycron.yaml` — a live export of your account, immediately usable with `plan`/`apply`
   - `steadycron_example.yaml` — a fully commented reference covering every manifest feature
+- **A README badge snippet** for the job — markdown you can paste straight into your repo's README.
+- **A `.gitignore` guard**, when the current directory is a git repo: appends `secrets.env` and
+  `*.env` so a stray secrets file can never be committed by accident.
+- **A GitHub Actions opt-in**, when the current directory looks like a GitHub-hosted repo (a
+  `.github/` folder, or a `github.com` remote): offers to write
+  `.github/workflows/steadycron.yml` — the same plan-on-PR/apply-on-merge workflow documented
+  [below](#cron-and-monitoring-as-code-in-ci), pre-wired to `steadycron.yaml`.
 
-The third wizard option, **Skip**, creates nothing but still writes both manifest files — the
-fastest way to start manifest-first on an empty account.
+The third wizard option, **Skip**, creates nothing but still writes both manifest files (and offers
+the `.gitignore`/CI setup) — the fastest way to start manifest-first on an empty account.
 
 `init` requires a configured API key (`signup`/`login`/`config set` first) and an interactive
-terminal. Run it again anytime to add another job.
+terminal. Run it again anytime to add another job, or use
+[`steadycron manifest add job`](#manifest-add--append-a-resource-to-an-existing-manifest) to add
+the next one manifest-first, without touching the API at all.
 
 ## Day-to-day commands
 
@@ -488,6 +498,55 @@ The Terraform boilerplate uses the exact resource and attribute names from the l
 `steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
 
 `manifest scaffold` requires no API key and no configuration — run it any time.
+
+### `manifest add` — append a resource to an existing manifest
+
+`steadycron manifest add <resource>` appends a single job, channel, tag, or template variable to
+an existing manifest — the manifest-first way to grow `steadycron.yaml` over time, instead of
+hand-editing YAML or creating resources imperatively with `jobs create`/`channels create`. Like
+`manifest scaffold`, it never calls the API and never requires a key: it edits the file directly,
+additively, and only after validating the result.
+
+```bash
+# Fully via flags — no prompts, safe for scripts
+steadycron manifest add job --kind heartbeat --name nightly-backup --schedule "0 2 * * *"
+steadycron manifest add channel --kind slack --name ops-slack
+steadycron manifest add tag env staging --color yellow
+steadycron manifest add variable api_token
+```
+
+Missing values are prompted for interactively — schedule prefills `*/15 * * * *`, timezone is the
+same UTC/local/manual selector `init` uses, and the grace period default is derived from the
+schedule, all computed locally (no API call):
+
+```
+$ steadycron manifest add job
+? Kind:
+  › heartbeat
+    http
+Job name: nightly-backup
+Schedule (cron) [*/15 * * * *]: ⏎
+? Timezone:
+  › UTC
+    Local (Europe/Berlin)
+    Other…
+Grace period seconds [1800]: ⏎
+✓ Added job nightly-backup to steadycron.yaml
+Preview: steadycron plan steadycron.yaml
+```
+
+Comments and formatting outside the inserted block are never touched — `add` locates the right
+section (creating it if absent, or the file itself if it doesn't exist yet) and appends after the
+last existing item. The candidate result is validated before anything is written; a failure (or a
+duplicate `id`/`name`) leaves the original file byte-identical and exits non-zero.
+
+Every secret-bearing field — channel webhook URLs, bot tokens, template variable values — is
+always emitted as an `${ENV_VAR}` placeholder with an explanatory comment. `add` never prompts for
+a secret value, so nothing you type ever ends up committed to the manifest in plaintext.
+
+`--dry-run` prints the generated block without writing anything; `-f/--file <path>` targets a
+manifest other than `steadycron.yaml`; `steadycron manifest g` is the short alias. `--terraform` is
+reserved for a future release and currently exits with an error.
 
 ## Importing existing schedules
 

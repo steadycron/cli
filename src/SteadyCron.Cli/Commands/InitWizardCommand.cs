@@ -6,6 +6,7 @@ using SteadyCron.Cli.Commands.Manifest;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
 using SteadyCron.Cli.Manifest;
+using SteadyCron.Cli.Manifest.Generators;
 using SteadyCron.Cli.Output;
 
 namespace SteadyCron.Cli.Commands;
@@ -58,6 +59,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
             output.Markup("Add jobs to steadycron.yaml and run [cyan]steadycron apply[/].");
             await WriteManifestFilesAsync(client, output, ct);
             PrintIaCBlock(output);
+            OfferCiSetup(output);
             return ExitCodes.Ok;
         }
 
@@ -79,10 +81,40 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
             JobFormatting.RenderPingSnippet(output, urls, job.CronExpression);
         }
 
+        PrintReadmeBadgeSnippet(output, job);
+
         await WriteManifestFilesAsync(client, output, ct);
         PrintIaCBlock(output);
+        OfferCiSetup(output);
 
         return ExitCodes.Ok;
+    }
+
+    /// <summary>A copy-pasteable README snippet for the badge SteadyCron already generates for
+    /// every job — badges are effectively free marketing surface once a repo README shows one.</summary>
+    internal static void PrintReadmeBadgeSnippet(OutputContext output, JobResponse job)
+    {
+        if (job.BadgeUrl is null)
+        {
+            return;
+        }
+
+        // Plain markdown, written via RawLine: it's long (image URL + link URL) and must survive
+        // copy-paste byte-for-byte, so it must neither be word-wrapped nor run through the markup
+        // parser (its own literal '[' / ']' would otherwise be parsed as invalid style tags).
+        var badgeMarkdown = $"[![{job.Name}]({job.BadgeUrl})](https://steadycron.com)";
+        var jobKey = job.JobKey ?? job.Id.ToString();
+
+        output.Line();
+        output.Markup("Add a status badge to your README:");
+        output.Line();
+        output.RawLine($"  {badgeMarkdown}");
+        if (job.PingUrls is { Success: var successUrl })
+        {
+            output.Markup($"  Pings on success: `curl -fsS {OutputContext.Escape(successUrl)}`");
+        }
+
+        output.Markup($"  Check status: `steadycron jobs get {jobKey}`");
     }
 
     internal static string BuildAlertConfirmation(string jobKind, AlertChannelResponse channel)
@@ -125,7 +157,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         var preview = await client.PreviewCronAsync(new CronPreviewRequest(schedule, timezone, 5), ct);
         PrintNextFires(output, preview, timezone);
 
-        var graceDefault = ComputeGraceDefault(preview.NextFires);
+        var graceDefault = CronScheduleHelper.ComputeGraceDefault(preview.NextFires);
         var graceText = output.Out.Prompt(new TextPrompt<string>($"Grace period seconds [[{graceDefault}]]:").AllowEmpty());
         var grace = string.IsNullOrWhiteSpace(graceText) ? graceDefault : int.Parse(graceText);
 
@@ -243,36 +275,9 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         output.Markup($"  Next fires: {OutputContext.Escape(text)} ({OutputContext.Escape(timezone)})");
     }
 
-    /// <summary>§3.5: grace defaults from the tightest gap between the next few fires, rather
-    /// than a flat 1800s for every schedule.</summary>
-    internal static int ComputeGraceDefault(IReadOnlyList<DateTimeOffset> fires)
-    {
-        if (fires.Count < 2)
-        {
-            return 1800;
-        }
-
-        var minGap = TimeSpan.MaxValue;
-        for (var i = 1; i < fires.Count; i++)
-        {
-            var gap = fires[i] - fires[i - 1];
-            if (gap < minGap)
-            {
-                minGap = gap;
-            }
-        }
-
-        if (minGap < TimeSpan.FromHours(1))
-        {
-            return 300;
-        }
-
-        return minGap < TimeSpan.FromHours(24) ? 1800 : 3600;
-    }
-
     private static async Task<string> PromptTimezoneAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
     {
-        var localIana = ResolveLocalIana();
+        var localIana = TimezoneHelper.ResolveLocalIana();
         var localLabel = localIana is not null ? $"Local ({localIana})" : null;
 
         var choices = new List<string> { "UTC" };
@@ -292,32 +297,6 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         }
 
         return choice == localLabel ? localIana! : "UTC";
-    }
-
-    /// <summary>§3.4/§10.3: resolves the local IANA zone name, converting from a Windows id if
-    /// necessary. Any failure (unmappable id, or an unreliable ICU-less conversion) omits the
-    /// Local option entirely rather than offering a broken choice.</summary>
-    internal static string? ResolveLocalIana()
-    {
-        try
-        {
-            var id = TimeZoneInfo.Local.Id;
-            if (OperatingSystem.IsWindows())
-            {
-                if (!TimeZoneInfo.TryConvertWindowsIdToIanaId(id, out var iana))
-                {
-                    return null;
-                }
-
-                id = iana;
-            }
-
-            return string.Equals(id, "UTC", StringComparison.OrdinalIgnoreCase) ? null : id;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     /// <summary>Free-text timezone entry, validated against the same IANA list the server accepts
@@ -348,6 +327,23 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
     {
         await WriteYamlExportAsync(client, output, ct);
         WriteCheatSheet(output);
+        EnsureGitignoreGuardsSecrets(output);
+    }
+
+    /// <summary>A committed `secrets.env` (or any stray `*.env`) is a real incident — the exported
+    /// manifest may already reference `${SC_…}` secrets, and `export --write-env` writes exactly
+    /// that filename. Near-zero cost to guard against by default when the CWD is a git repo.</summary>
+    private static void EnsureGitignoreGuardsSecrets(OutputContext output)
+    {
+        if (!GitRepositoryHelper.IsGitRepo("."))
+        {
+            return;
+        }
+
+        if (GitignoreGuard.EnsureSecretsIgnored(".gitignore"))
+        {
+            output.Success("Added secrets.env to .gitignore");
+        }
     }
 
     private async Task WriteYamlExportAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
@@ -415,4 +411,74 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         output.Markup("  3. [cyan]steadycron plan steadycron.yaml[/]        preview changes");
         output.Markup("  4. [cyan]steadycron apply steadycron.yaml[/]       sync to your account");
     }
+
+    // ── GitHub Actions opt-in (all branches including Skip) ───────────────────────
+
+    /// <summary>
+    /// Turns "here's the IaC workflow" into "the IaC workflow is installed": when the CWD looks
+    /// like a GitHub-hosted repo, offers to install the plan-on-PR/apply-on-merge workflow this
+    /// README already documents by hand. RunAsync already required an interactive terminal before
+    /// any of this ran, so no further TerminalHelper check is needed here.
+    /// </summary>
+    private static void OfferCiSetup(OutputContext output)
+    {
+        if (!GitRepositoryHelper.IsGitRepo(".") ||
+            (!Directory.Exists(".github") && !GitRepositoryHelper.HasGitHubRemote(".")))
+        {
+            return;
+        }
+
+        if (!output.Out.Confirm("Set up CI? Plan on PRs, apply on merge", defaultValue: false))
+        {
+            return;
+        }
+
+        const string workflowPath = ".github/workflows/steadycron.yml";
+        if (File.Exists(workflowPath))
+        {
+            output.Markup($"{workflowPath} already exists — skipped.");
+            return;
+        }
+
+        Directory.CreateDirectory(".github/workflows");
+        File.WriteAllText(workflowPath, CiWorkflowTemplate);
+        output.Success($"Wrote {workflowPath}");
+        output.Markup("Add [bold]STEADYCRON_API_KEY[/] as a repository secret — consider a read-only key for plan-only.");
+    }
+
+    // Adapted from the README's "Cron and monitoring as code in CI" example: same single-workflow
+    // plan-on-PR/apply-on-merge shape, but pointed at the single `steadycron.yaml` init actually
+    // writes (the README's own example targets a `steadycron/` directory of manifests, and omits
+    // `namespace`/`prune` — this account has neither yet, and prune requires a namespace).
+    internal const string CiWorkflowTemplate =
+        """
+        # .github/workflows/steadycron.yml
+        # Generated by `steadycron init` — plans on pull requests, applies on merge to main.
+        name: SteadyCron
+
+        on:
+          pull_request:
+            paths: ["steadycron.yaml"]
+          push:
+            branches: [main]
+            paths: ["steadycron.yaml"]
+
+        permissions:
+          contents: read
+          pull-requests: write
+
+        jobs:
+          steadycron:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v4
+              - uses: steadycron/action@v1
+                with:
+                  # plan on PRs, apply on push to main
+                  command: ${{ github.event_name == 'pull_request' && 'plan' || 'apply' }}
+                  manifest: steadycron.yaml
+                  comment-on-pr: "true"
+                env:
+                  STEADYCRON_API_KEY: ${{ secrets.STEADYCRON_API_KEY }}
+        """;
 }

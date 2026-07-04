@@ -4,6 +4,7 @@ using Xunit;
 
 namespace SteadyCron.Cli.Tests;
 
+[Collection("ConsoleOutRedirection")]
 public sealed class OutputContextTests
 {
     [Fact]

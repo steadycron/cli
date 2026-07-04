@@ -122,12 +122,30 @@ app.Configure(config =>
 
     config.AddBranch("manifest", manifest =>
     {
-        manifest.SetDescription("Generate manifest boilerplate.");
+        manifest.SetDescription("Generate manifest boilerplate, or append a resource to an existing manifest.");
         manifest.AddCommand<InitCommand>("scaffold")
             .WithDescription("Generate a fully documented boilerplate manifest (or Terraform HCL) covering every SteadyCron feature.")
             .WithExample("manifest", "scaffold")
             .WithExample("manifest", "scaffold", "-o", "steadycron.yaml")
             .WithExample("manifest", "scaffold", "--terraform", "-o", "steadycron.tf");
+
+        manifest.AddBranch("add", add =>
+        {
+            add.SetDescription("Append a single resource to an existing manifest (no API calls, no API key required).");
+            add.AddCommand<AddJobCommand>("job")
+                .WithDescription("Append a job to the manifest.")
+                .WithExample("manifest", "add", "job", "--kind", "heartbeat", "--name", "nightly-backup")
+                .WithExample("manifest", "add", "job", "--kind", "http", "--name", "daily-report", "--url", "https://api.example.com/jobs/daily-report");
+            add.AddCommand<AddChannelCommand>("channel")
+                .WithDescription("Append an alert channel to the manifest.")
+                .WithExample("manifest", "add", "channel", "--kind", "slack", "--name", "ops-slack");
+            add.AddCommand<AddTagCommand>("tag")
+                .WithDescription("Append a tag to the manifest.")
+                .WithExample("manifest", "add", "tag", "env", "staging", "--color", "yellow");
+            add.AddCommand<AddVariableCommand>("variable")
+                .WithDescription("Append a template variable to the manifest.")
+                .WithExample("manifest", "add", "variable", "api_token");
+        }).WithAlias("g");
     });
 
     config.AddBranch("jobs", jobs =>

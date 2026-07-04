@@ -73,6 +73,22 @@ public sealed class OutputContext
         Out.WriteLine(text);
     }
 
+    /// <summary>
+    /// Writes a line of primary output verbatim, bypassing Spectre's word-wrap (and markup
+    /// parsing) entirely — for content the user needs to copy byte-for-byte (a URL, a markdown
+    /// snippet) where a wrapped line could read as broken, or corrupt the copy in a terminal that
+    /// doesn't track soft-wrapped lines. Suppressed by <c>--quiet</c>/<c>--json</c> like <see cref="Line"/>.
+    /// </summary>
+    public void RawLine(string text)
+    {
+        if (Quiet || Json)
+        {
+            return;
+        }
+
+        Console.Out.WriteLine(text);
+    }
+
     /// <summary>Writes a markup line to stdout (suppressed by <c>--quiet</c> / <c>--json</c>).</summary>
     public void Markup(string markup)
     {

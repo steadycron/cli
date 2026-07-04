@@ -6,6 +6,7 @@ using SteadyCron.Cli.Api;
 using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
+using SteadyCron.Cli.Manifest;
 using SteadyCron.Cli.Output;
 
 namespace SteadyCron.Cli.Commands.Channels;
@@ -151,7 +152,7 @@ public sealed class ChannelCreateSettings : CliSettings
 
 public sealed class ChannelCreateCommand : SteadyCronCommandBase<ChannelCreateSettings>
 {
-    private static readonly string[] KnownKinds = ["email", "slack", "discord", "webhook", "telegram"];
+    private static readonly IReadOnlyList<string> KnownKinds = ManifestSchema.ChannelKinds;
 
     public ChannelCreateCommand(ConfigResolver r, SteadyCronClientFactory f, CancellationProvider c) : base(r, f, c) { }
 

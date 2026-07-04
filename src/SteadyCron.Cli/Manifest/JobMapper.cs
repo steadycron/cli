@@ -16,7 +16,7 @@ public sealed record UpdateResult(
 /// </summary>
 public sealed class JobMapper
 {
-    private static readonly string[] HttpMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+    private static readonly IReadOnlyList<string> HttpMethods = ManifestSchema.HttpMethods;
 
     // ── manifest → desired ───────────────────────────────────────────────────────
 
@@ -424,11 +424,13 @@ public sealed class JobMapper
         }
 
         var v = value.Trim().ToLowerInvariant();
-        return v switch
+        if (!ManifestSchema.MisfirePolicies.Contains(v))
         {
-            "do_nothing" or "fire_once_now" => v,
-            _ => throw new ManifestException($"{label}: 'misfire_policy' must be 'do_nothing' or 'fire_once_now' (got '{value}')."),
-        };
+            throw new ManifestException(
+                $"{label}: 'misfire_policy' must be one of {string.Join(", ", ManifestSchema.MisfirePolicies)} (got '{value}').");
+        }
+
+        return v;
     }
 
     private static IReadOnlyList<int>? NormalizeStatusCodes(List<int>? codes, string label)

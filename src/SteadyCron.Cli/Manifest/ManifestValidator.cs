@@ -164,19 +164,18 @@ public sealed class ManifestValidator
         if (!string.IsNullOrWhiteSpace(job.Method))
         {
             var m = job.Method.Trim().ToUpperInvariant();
-            string[] valid = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-            if (!valid.Contains(m))
+            if (!ManifestSchema.HttpMethods.Contains(m))
             {
-                errors.Add($"{label}: 'method' must be one of {string.Join(", ", valid)} (got '{job.Method}').");
+                errors.Add($"{label}: 'method' must be one of {string.Join(", ", ManifestSchema.HttpMethods)} (got '{job.Method}').");
             }
         }
 
         if (!string.IsNullOrWhiteSpace(job.MisfirePolicy))
         {
             var mp = job.MisfirePolicy.Trim().ToLowerInvariant();
-            if (mp != "do_nothing" && mp != "fire_once_now")
+            if (!ManifestSchema.MisfirePolicies.Contains(mp))
             {
-                errors.Add($"{label}: 'misfire_policy' must be 'do_nothing' or 'fire_once_now' (got '{job.MisfirePolicy}').");
+                errors.Add($"{label}: 'misfire_policy' must be one of {string.Join(", ", ManifestSchema.MisfirePolicies)} (got '{job.MisfirePolicy}').");
             }
         }
 

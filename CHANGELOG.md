@@ -6,6 +6,44 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-04
+
+### Added
+
+- **`steadycron manifest add <resource>`** (alias `manifest g`) — Angular-CLI-style generators
+  that append a single `job`, `channel`, `tag`, or `variable` to an existing manifest, instead of
+  hand-editing YAML or creating resources imperatively. Fully non-interactive when every value is
+  passed as a flag (safe for scripts); missing values are prompted for. Client-side only — no API
+  calls, no API key required, same contract as `manifest scaffold`/`import`.
+  - Comments and formatting outside the inserted block are never touched: the new section-append
+    editor locates the right section (creating it, or the file itself, if absent) and appends
+    after the last existing item, re-indenting to match the file's own style. Refuses to edit a
+    file with tabs or a flow-style section (`jobs: []`) rather than risk corrupting it.
+  - The candidate result is validated before anything is written; a failure (or a duplicate
+    `id`/`name`/`key:value`) leaves the original file byte-identical and exits non-zero.
+  - Secret-bearing fields (channel webhook URLs/bot tokens, variable values) are always emitted as
+    `${ENV_VAR}` placeholders with an explanatory comment — this command never prompts for a
+    secret value.
+  - `--dry-run` prints the generated block without writing; `-f/--file` targets a manifest other
+    than `steadycron.yaml`; `--terraform` is reserved for a future release and currently errors.
+  - Schedule/timezone/grace-period prompts work fully offline (no `init` API dependency) via the
+    new Cronos-backed local cron evaluator — same defaults and derivation as `init`'s wizard.
+- **`steadycron init` now sets up your repo, not just your account**:
+  - Adds a `.gitignore` guard: when the current directory is a git repo, appends `secrets.env` and
+    `*.env` so a stray secrets file can never be committed by accident.
+  - Offers to install CI: when the repo looks GitHub-hosted (a `.github/` folder, or a
+    `github.com` remote), prompts `Set up CI? Plan on PRs, apply on merge` and writes
+    `.github/workflows/steadycron.yml` — the same plan-on-PR/apply-on-merge workflow this README
+    documents by hand — plus a reminder to add `STEADYCRON_API_KEY` as a repository secret.
+  - Prints a copy-pasteable README badge snippet for the job that was just created.
+
+### Fixed
+
+- **`steadycron init` could crash** creating a heartbeat or HTTP job whose badge markdown snippet
+  was rendered through the markup parser — the snippet's own `[`/`]` characters were parsed as an
+  (invalid) style tag (`Could not find color or style 'nightly-backup'`). Long unbroken lines
+  meant for copy-paste (URLs, markdown) now bypass both markup parsing and word-wrapping.
+
 ## [1.13.0] - 2026-07-04
 
 ### Added
@@ -340,7 +378,8 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/steadycron/cli/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/steadycron/cli/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/steadycron/cli/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/steadycron/cli/compare/v1.11.0...v1.11.1
