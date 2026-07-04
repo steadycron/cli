@@ -344,17 +344,30 @@ Secret fields never leave the server in plaintext: on `export` they come back as
 placeholders (alert-channel credentials such as `webhook_url`/`bot_token`/`secret`/webhook headers,
 and **template-variable values**). To `apply` such a manifest you must supply those values.
 
-Provide them with one or more `--env-file` flags (repeatable; values take precedence over the
-process environment so a file prepared for the target account is authoritative):
+`steadycron init` writes `steadycron_secrets.env` for you — a scaffold listing every secret your
+account's manifest actually references (empty until you add a secret-bearing channel or variable),
+and adds it to `.gitignore` automatically. `apply`/`sync`/`plan`/`validate` pick it up with **no
+flag needed**, as long as it's in the current directory:
+
+```bash
+steadycron init                    # writes steadycron.yaml + steadycron_secrets.env (gitignored)
+#  ... fill in steadycron_secrets.env with real values ...
+steadycron apply                   # uses steadycron.yaml + steadycron_secrets.env automatically
+```
+
+For anything else — a different filename, multiple files, restoring to a different account — pass
+one or more `--env-file` flags explicitly (repeatable; an explicit flag always fully overrides the
+default file; values take precedence over the process environment):
 
 ```bash
 steadycron apply production.yaml --namespace prod --env-file secrets.env
 ```
 
-When a manifest references any required `${...}` placeholder, `apply`/`sync`/`plan` **refuse to run
-without an `--env-file`** — pass one, or `--allow-process-env` to source the values from the current
-environment instead (e.g. CI that injects secrets as env vars). `validate` supports `--env-file` but
-never enforces this (it's a local, read-only lint).
+When a manifest references any required `${...}` placeholder and neither the default file nor an
+explicit `--env-file` resolves it, `apply`/`sync`/`plan` **refuse to run** — pass `--env-file`, or
+`--allow-process-env` to source the values from the current environment instead (e.g. CI that
+injects secrets as env vars). `validate` supports the same `--env-file`/auto-detection but never
+enforces this (it's a local, read-only lint).
 
 ### Restoring to another account
 
@@ -442,7 +455,7 @@ Applies immediately without prompting. Typical use: CI pipelines on merge to the
 
 ```bash
 steadycron export -o steadycron.yaml                     # whole account → file
-steadycron export -o steadycron.yaml --write-env secrets.env   # + a .env scaffold for its secrets
+steadycron export -o steadycron.yaml --write-env         # + steadycron_secrets.env scaffold for its secrets
 steadycron export --scope jobs -o jobs.yaml              # jobs only
 steadycron export --scope job weekly-digest-email        # single job → stdout
 steadycron export --format json                          # JSON instead of YAML
@@ -454,8 +467,10 @@ replaced with `${SC_…}` placeholders, never plaintext. The CLI prints a summar
 environment variables to stderr (so piping with `-o` stays clean), and the manifest itself carries a
 `# required env vars:` header block.
 
-`--write-env <path>` writes a ready-to-fill `.env` scaffold listing every referenced secret
-(refuses to overwrite an existing file). Fill it in, then `apply … --env-file <path>`.
+`--write-env [path]` writes a ready-to-fill `.env` scaffold listing every referenced secret
+(refuses to overwrite an existing file) — defaults to `steadycron_secrets.env` when no path is
+given, which `apply`/`sync`/`plan`/`validate` then pick up with no flag needed. Pass an explicit
+path (e.g. `--write-env secrets.env`) to use a different name.
 
 Useful for bootstrapping: export your current account, commit the result, and manage it as code
 going forward. To move an account to a new one, see [Restoring to another account](#restoring-to-another-account).

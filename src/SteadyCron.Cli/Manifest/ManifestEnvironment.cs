@@ -10,6 +10,28 @@ namespace SteadyCron.Cli.Manifest;
 /// </summary>
 public static class ManifestEnvironment
 {
+    /// <summary>The env file `init` writes by default, and every command that resolves
+    /// <c>${...}</c> placeholders looks for automatically when no <c>--env-file</c> is given.</summary>
+    public const string DefaultSecretsFile = "steadycron_secrets.env";
+
+    /// <summary>
+    /// Resolves the effective <c>--env-file</c> list: exactly what was passed explicitly, or (only
+    /// when nothing was passed) <see cref="DefaultSecretsFile"/> if it exists in
+    /// <paramref name="directory"/> (the current directory by default — explicit only so tests
+    /// don't need to mutate the process's real working directory). An explicit <c>--env-file</c>
+    /// always fully overrides the default — the two are never merged, matching how the manifest
+    /// path argument itself defaults.
+    /// </summary>
+    public static IReadOnlyList<string> ResolveEnvFiles(IReadOnlyList<string> explicitEnvFiles, string directory = ".")
+    {
+        if (explicitEnvFiles.Count > 0)
+        {
+            return explicitEnvFiles;
+        }
+
+        return File.Exists(Path.Combine(directory, DefaultSecretsFile)) ? [DefaultSecretsFile] : [];
+    }
+
     /// <summary>
     /// Returns a <c>getVar</c> delegate for <see cref="ManifestLoader.LoadFromPaths"/>.
     /// When <paramref name="enforceEnvFile"/> is set and the manifest references any required

@@ -1,3 +1,4 @@
+using System.Text;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SteadyCron.Cli.Api;
@@ -325,14 +326,15 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
     private async Task WriteManifestFilesAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
     {
-        await WriteYamlExportAsync(client, output, ct);
+        var manifestText = await WriteYamlExportAsync(client, output, ct);
         WriteCheatSheet(output);
+        WriteSecretsEnvFile(output, manifestText);
         EnsureGitignoreGuardsSecrets(output);
     }
 
-    /// <summary>A committed `secrets.env` (or any stray `*.env`) is a real incident — the exported
-    /// manifest may already reference `${SC_…}` secrets, and `export --write-env` writes exactly
-    /// that filename. Near-zero cost to guard against by default when the CWD is a git repo.</summary>
+    /// <summary>A committed secrets file is a real incident — the exported manifest may already
+    /// reference `${SC_…}` secrets, and `steadycron_secrets.env` (below) exists specifically to
+    /// hold them. Near-zero cost to guard against by default when the CWD is a git repo.</summary>
     private static void EnsureGitignoreGuardsSecrets(OutputContext output)
     {
         if (!GitRepositoryHelper.IsGitRepo("."))
@@ -342,17 +344,20 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
         if (GitignoreGuard.EnsureSecretsIgnored(".gitignore"))
         {
-            output.Success("Added secrets.env to .gitignore");
+            output.Success($"Added {ManifestEnvironment.DefaultSecretsFile} to .gitignore");
         }
     }
 
-    private async Task WriteYamlExportAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
+    /// <summary>Returns the exported (or already-existing) manifest text so
+    /// <see cref="WriteSecretsEnvFile"/> can scan it for real <c>${...}</c> placeholders — null
+    /// only when neither is available (a fresh export failed).</summary>
+    private async Task<string?> WriteYamlExportAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
     {
         const string path = "steadycron.yaml";
         if (File.Exists(path))
         {
             output.Markup($"{path} already exists — skipped. Regenerate anytime with: [cyan]steadycron export -o {path}[/]");
-            return;
+            return await File.ReadAllTextAsync(path, ct);
         }
 
         string text;
@@ -364,7 +369,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         {
             output.Warn($"Could not export your account: {ex.Message}");
             output.Warn($"Run `steadycron export -o {path}` manually later.");
-            return;
+            return null;
         }
 
         await File.WriteAllTextAsync(path, text, ct);
@@ -387,6 +392,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         }
 
         output.Success($"Wrote {path} — your account as code{summary}");
+        return text;
     }
 
     private static void WriteCheatSheet(OutputContext output)
@@ -400,6 +406,55 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
         File.WriteAllText(path, InitCommand.YamlBoilerplate);
         output.Success($"Wrote {path} — reference for every manifest feature");
+    }
+
+    /// <summary>
+    /// Scaffolds <see cref="ManifestEnvironment.DefaultSecretsFile"/> from the manifest's real
+    /// <c>${...}</c> placeholders (the same <see cref="EnvInterpolator.FindPlaceholders"/>
+    /// <c>export --write-env</c> uses) — never a guessed or generic filename, so the
+    /// <c>.gitignore</c> guard has exactly one name to protect, and `apply`/`sync`/`plan`/`validate`
+    /// can auto-detect it with no flag needed.
+    /// </summary>
+    private static void WriteSecretsEnvFile(OutputContext output, string? manifestText) =>
+        WriteSecretsEnvFile(output, manifestText, ManifestEnvironment.DefaultSecretsFile);
+
+    /// <summary>Path-parameterized so tests can target a temp file instead of the real CWD.</summary>
+    internal static void WriteSecretsEnvFile(OutputContext output, string? manifestText, string path)
+    {
+        if (File.Exists(path))
+        {
+            output.Markup($"{path} already exists — skipped.");
+            return;
+        }
+
+        File.WriteAllText(path, BuildSecretsEnvContent(manifestText, out var placeholderCount));
+
+        var summary = placeholderCount > 0 ? $" ({JobFormatting.Pluralize(placeholderCount, "secret")} to fill in)" : string.Empty;
+        output.Success($"Wrote {path}{summary}");
+    }
+
+    internal static string BuildSecretsEnvContent(string? manifestText, out int placeholderCount)
+    {
+        var placeholders = manifestText is not null ? EnvInterpolator.FindPlaceholders(manifestText) : [];
+        placeholderCount = placeholders.Count;
+
+        var sb = new StringBuilder();
+        sb.Append("# SteadyCron secrets — fill in real values, then `steadycron apply` uses them automatically.\n");
+        sb.Append("# Format: NAME=value (one per line, no quotes needed).\n");
+        sb.Append("#\n");
+        sb.Append("# Example:\n");
+        sb.Append("# MY_SECRET_KEY=MY_SECRET_VALUE\n");
+
+        if (placeholders.Count > 0)
+        {
+            sb.Append('\n');
+            foreach (var name in placeholders)
+            {
+                sb.Append(name).Append("=\n");
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static void PrintIaCBlock(OutputContext output)

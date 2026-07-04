@@ -83,9 +83,9 @@ app.Configure(config =>
 
     config.AddCommand<SyncCommand>("sync")
         .WithDescription("Reconcile your account with a YAML manifest (infrastructure-as-code).")
-        .WithExample("sync", "jobs.yaml")
-        .WithExample("sync", "jobs.yaml", "--dry-run")
-        .WithExample("sync", "jobs.yaml", "--prune", "--yes");
+        .WithExample("sync", "steadycron.yaml")
+        .WithExample("sync", "steadycron.yaml", "--dry-run")
+        .WithExample("sync", "steadycron.yaml", "--prune", "--yes");
 
     config.AddCommand<PlanCommand>("plan")
         .WithDescription("Preview what sync would change (alias for sync --dry-run).")
@@ -101,7 +101,7 @@ app.Configure(config =>
         .WithExample("export", "--format", "terraform", "-o", "main.tf")
         .WithExample("export", "--format", "terraform", "--scope", "job", "weekly-digest-email", "-o", "job.tf")
         .WithExample("export", "-o", "steadycron.yaml")
-        .WithExample("export", "-o", "steadycron.yaml", "--write-env", "secrets.env")
+        .WithExample("export", "-o", "steadycron.yaml", "--write-env")
         .WithExample("export", "--scope", "jobs")
         .WithExample("export", "--scope", "job", "weekly-digest-email");
 

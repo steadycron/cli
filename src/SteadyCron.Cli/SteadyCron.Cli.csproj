@@ -22,7 +22,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
     <!-- Default version for local builds; CI overrides via -p:Version=… from the git tag. -->
-    <Version Condition="'$(Version)' == ''">1.14.0</Version>
+    <Version Condition="'$(Version)' == ''">1.15.0</Version>
   </PropertyGroup>
 
   <!-- ── Optional package icon (auto-included once icon.png is added at the repo root) ── -->

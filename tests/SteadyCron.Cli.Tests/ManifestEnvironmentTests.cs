@@ -106,4 +106,38 @@ public sealed class ManifestEnvironmentTests
         var getVar = ManifestEnvironment.Build([dir], [], allowProcessEnv: true, enforceEnvFile: false);
         Assert.NotNull(getVar);
     }
+
+    // ── ResolveEnvFiles (default secrets-file auto-detection) ────────────────────
+
+    [Fact]
+    public void ResolveEnvFiles_explicitFlag_alwaysWins_evenWhenDefaultFileExists()
+    {
+        var dir = CreateTempDir();
+        WriteFile(dir, ManifestEnvironment.DefaultSecretsFile, "IGNORED=x\n");
+
+        var result = ManifestEnvironment.ResolveEnvFiles(["custom.env"], dir);
+
+        Assert.Equal(["custom.env"], result);
+    }
+
+    [Fact]
+    public void ResolveEnvFiles_noExplicitFlag_usesDefaultFile_whenItExists()
+    {
+        var dir = CreateTempDir();
+        WriteFile(dir, ManifestEnvironment.DefaultSecretsFile, "X=1\n");
+
+        var result = ManifestEnvironment.ResolveEnvFiles([], dir);
+
+        Assert.Equal([ManifestEnvironment.DefaultSecretsFile], result);
+    }
+
+    [Fact]
+    public void ResolveEnvFiles_noExplicitFlag_emptyResult_whenDefaultFileAbsent()
+    {
+        var dir = CreateTempDir();
+
+        var result = ManifestEnvironment.ResolveEnvFiles([], dir);
+
+        Assert.Empty(result);
+    }
 }

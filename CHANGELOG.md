@@ -6,6 +6,39 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-04
+
+### Fixed
+
+- **`steadycron manifest add <resource>` could corrupt a manifest** whose sequence items sit at
+  the same column as their section key (`jobs:\n- id: x`) rather than indented under it (`jobs:\n
+  \  - id: x`) — exactly the style this CLI's own `export` produces. The new block was inserted in
+  the wrong place (before existing items, not after) with mismatched indentation, and YamlDotNet
+  correctly rejected the result. Nothing was lost — the validated-write already refused to persist
+  a broken candidate — but the command was unusable against `init`-generated files. Both the
+  section-boundary detection and the indent-matching logic now handle either style correctly.
+- **`sync`/`plan`/`apply`/`validate` defaulted to `jobs.yaml`** when no manifest path was given,
+  left over from before `init`/`manifest scaffold`/`manifest add` standardized on
+  `steadycron.yaml` — so `steadycron apply` right after `init` failed with "Manifest file not
+  found: jobs.yaml". All four now default to `steadycron.yaml`.
+
+### Added
+
+- **`steadycron_secrets.env`**: `init` now writes this file by default (alongside
+  `steadycron.yaml`/`steadycron_example.yaml`, never overwriting an existing one), scaffolded from
+  the real `${...}` secret placeholders your account's manifest actually references. Naming the
+  file predictably (rather than trying to guess whatever name a user might pick) closes a real gap
+  in the `.gitignore` guard added in 1.14.0, which could only protect a filename it actually knew
+  about.
+  - `apply`/`sync`/`plan`/`validate` now auto-detect `steadycron_secrets.env` in the current
+    directory with **no `--env-file` flag needed** (an explicit `--env-file` always overrides it
+    entirely; CI behavior — `--allow-process-env` for injected secrets — is unchanged).
+  - `export --write-env` can now be passed with no path (`--write-env` alone) and defaults to the
+    same filename; an explicit path still works exactly as before.
+  - The `.gitignore` guard now writes `*.env` + `.env.*` instead of a hardcoded `secrets.env` —
+    `*.env` alone already covers `steadycron_secrets.env` (and bare `.env`); `.env.*` additionally
+    covers the `.env.local`/`.env.production` dotenv convention.
+
 ## [1.14.0] - 2026-07-04
 
 ### Added
@@ -378,7 +411,8 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
   single-file binaries.
 - MIT license, complete NuGet metadata, Source Link, and reproducible builds.
 
-[Unreleased]: https://github.com/steadycron/cli/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/steadycron/cli/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/steadycron/cli/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/steadycron/cli/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/steadycron/cli/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/steadycron/cli/compare/v1.11.1...v1.12.0

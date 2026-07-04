@@ -9,7 +9,7 @@ namespace SteadyCron.Cli.Commands.Validate;
 public sealed class ValidateSettings : CommandSettings
 {
     [CommandArgument(0, "[PATHS...]")]
-    [Description("One or more manifest files or directories (default: jobs.yaml).")]
+    [Description("One or more manifest files or directories (default: steadycron.yaml).")]
     public string[]? Paths { get; set; }
 
     [CommandOption("--no-warn-v1")]
@@ -21,7 +21,7 @@ public sealed class ValidateSettings : CommandSettings
     public string[]? EnvFiles { get; set; }
 
     public IEnumerable<string> EffectivePaths =>
-        Paths is { Length: > 0 } ? Paths : ["jobs.yaml"];
+        Paths is { Length: > 0 } ? Paths : ["steadycron.yaml"];
 
     public IReadOnlyList<string> EnvFileList => EnvFiles ?? [];
 }
@@ -48,8 +48,14 @@ public sealed class ValidateCommand : Command<ValidateSettings>
         {
             // Validate is a local read-only lint, so the env-file guardrail is not enforced here;
             // --env-file is supported only to let manifests with ${...} interpolate during the lint.
+            var envFiles = ManifestEnvironment.ResolveEnvFiles(settings.EnvFileList);
+            if (envFiles.Count > 0 && settings.EnvFileList.Count == 0)
+            {
+                AnsiConsole.MarkupLineInterpolated($"[grey]Using secrets from {envFiles[0]}[/]");
+            }
+
             var getVar = ManifestEnvironment.Build(
-                settings.EffectivePaths, settings.EnvFileList,
+                settings.EffectivePaths, envFiles,
                 allowProcessEnv: true, enforceEnvFile: false);
             manifest = _loader.LoadFromPaths(settings.EffectivePaths, getVar);
         }

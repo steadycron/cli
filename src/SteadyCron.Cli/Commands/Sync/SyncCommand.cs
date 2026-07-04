@@ -11,7 +11,7 @@ namespace SteadyCron.Cli.Commands.Sync;
 public class SyncSettings : CliSettings
 {
     [CommandArgument(0, "[PATHS...]")]
-    [Description("Manifest files or directories (default: jobs.yaml).")]
+    [Description("Manifest files or directories (default: steadycron.yaml).")]
     public string[]? Paths { get; set; }
 
     [CommandOption("--namespace|-n")]
@@ -47,7 +47,7 @@ public class SyncSettings : CliSettings
     public bool AllowProcessEnv { get; set; }
 
     public IEnumerable<string> EffectivePaths =>
-        Paths is { Length: > 0 } ? Paths : ["jobs.yaml"];
+        Paths is { Length: > 0 } ? Paths : ["steadycron.yaml"];
 
     public IReadOnlyList<string> EnvFileList => EnvFiles ?? [];
 }

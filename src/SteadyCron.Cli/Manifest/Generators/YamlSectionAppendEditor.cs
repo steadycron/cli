@@ -97,8 +97,15 @@ public sealed class YamlSectionAppendEditor : IManifestFileEditor
 
     /// <summary>
     /// Finds the section header and the index to insert at (right after the section's last
-    /// indented content line). Returns <c>(-1, -1)</c> if the section doesn't exist.
+    /// content line). Returns <c>(-1, -1)</c> if the section doesn't exist.
     /// </summary>
+    /// <remarks>
+    /// A section's list items may be indented under the key (<c>jobs:\n  - id: x</c>) or written
+    /// at the *same* column as the key itself — <c>jobs:\n- id: x</c> is equally valid YAML, and
+    /// is exactly what this CLI's own server-side <c>export</c> emits. A column-0 line is only a
+    /// new top-level key (ending the section) when it *isn't* a sequence item; a column-0 line
+    /// starting with <c>-</c> is still this section's next entry.
+    /// </remarks>
     private static (int HeaderIndex, int InsertAt) FindSectionRange(IReadOnlyList<string> lines, string key)
     {
         var headerPattern = new Regex($@"^{Regex.Escape(key)}:\s*(#.*)?$");
@@ -126,13 +133,13 @@ public sealed class YamlSectionAppendEditor : IManifestFileEditor
                 continue; // blank line inside the section — keep scanning
             }
 
-            if (char.IsWhiteSpace(line[0]))
+            if (char.IsWhiteSpace(line[0]) || line[0] == '-')
             {
-                lastContent = i; // indented content — still part of this section
+                lastContent = i; // indented content, or a zero-indent sequence item — still this section
                 continue;
             }
 
-            break; // column-0, non-blank — a new top-level key (or comment) ends the section
+            break; // column-0, non-blank, not a list item — a new top-level key ends the section
         }
 
         return (headerIndex, lastContent + 1);
@@ -197,9 +204,15 @@ public sealed class YamlSectionAppendEditor : IManifestFileEditor
 
     // ── Indentation ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Detects the file's list-item indent — the number of spaces before a sequence item's
+    /// <c>-</c>. Zero is a valid, common result (<c>jobs:\n- id: x</c>, e.g. this CLI's own
+    /// server-side <c>export</c> output) — not just the "indented under the key" style
+    /// (<c>jobs:\n  - id: x</c>) this CLI's own hand-written templates use.
+    /// </summary>
     private static int DetectIndentWidth(IReadOnlyList<string> lines)
     {
-        var pattern = new Regex(@"^( +)-\s");
+        var pattern = new Regex(@"^( *)-\s");
         foreach (var line in lines)
         {
             var match = pattern.Match(line);
@@ -212,10 +225,18 @@ public sealed class YamlSectionAppendEditor : IManifestFileEditor
         return CanonicalIndentWidth;
     }
 
-    private static List<string> ReindentBlock(string block, int targetWidth)
+    /// <summary>
+    /// Re-indents a block authored at the canonical 2-space item indent to match
+    /// <paramref name="targetItemIndent"/>. Uses a constant additive offset (not a per-level
+    /// multiplicative scale) because a sequence item's fields are always exactly 2 columns past
+    /// its own <c>-</c> regardless of where that <c>-</c> sits — including at column 0, where a
+    /// multiplicative scale would incorrectly flatten every field to column 0 too.
+    /// </summary>
+    private static List<string> ReindentBlock(string block, int targetItemIndent)
     {
         var blockLines = block.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
-        if (targetWidth == CanonicalIndentWidth)
+        var delta = targetItemIndent - CanonicalIndentWidth;
+        if (delta == 0)
         {
             return [.. blockLines];
         }
@@ -231,9 +252,8 @@ public sealed class YamlSectionAppendEditor : IManifestFileEditor
 
             var trimmed = line.TrimStart(' ');
             var leading = line.Length - trimmed.Length;
-            var level = leading / CanonicalIndentWidth;
-            var remainder = leading % CanonicalIndentWidth;
-            result.Add(new string(' ', level * targetWidth + remainder) + trimmed);
+            var newLeading = Math.Max(0, leading + delta);
+            result.Add(new string(' ', newLeading) + trimmed);
         }
 
         return result;

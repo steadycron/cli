@@ -34,8 +34,14 @@ public sealed class ReconcileEngine
         ManifestFile manifest;
         try
         {
+            var envFiles = ManifestEnvironment.ResolveEnvFiles(settings.EnvFileList);
+            if (envFiles.Count > 0 && settings.EnvFileList.Count == 0)
+            {
+                output.Info($"Using secrets from {envFiles[0]}");
+            }
+
             var getVar = ManifestEnvironment.Build(
-                settings.EffectivePaths, settings.EnvFileList,
+                settings.EffectivePaths, envFiles,
                 allowProcessEnv: settings.AllowProcessEnv, enforceEnvFile: true);
             manifest = _loader.LoadFromPaths(settings.EffectivePaths, getVar);
         }

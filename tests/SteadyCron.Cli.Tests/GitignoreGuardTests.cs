@@ -22,8 +22,10 @@ public sealed class GitignoreGuardTests : IDisposable
 
         Assert.True(changed);
         var content = File.ReadAllText(_path);
-        Assert.Contains("secrets.env", content, StringComparison.Ordinal);
+        // *.env alone already matches ManifestEnvironment.DefaultSecretsFile ("steadycron_secrets.env");
+        // .env.* additionally covers the .env.local / .env.production dotenv convention.
         Assert.Contains("*.env", content, StringComparison.Ordinal);
+        Assert.Contains(".env.*", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -36,8 +38,8 @@ public sealed class GitignoreGuardTests : IDisposable
         Assert.True(changed);
         var content = File.ReadAllText(_path);
         Assert.StartsWith("node_modules/\ndist/\n", content, StringComparison.Ordinal);
-        Assert.Contains("secrets.env", content, StringComparison.Ordinal);
         Assert.Contains("*.env", content, StringComparison.Ordinal);
+        Assert.Contains(".env.*", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -48,7 +50,7 @@ public sealed class GitignoreGuardTests : IDisposable
         GitignoreGuard.EnsureSecretsIgnored(_path);
 
         var content = File.ReadAllText(_path);
-        Assert.DoesNotContain("node_modules/secrets.env", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("node_modules/*.env", content, StringComparison.Ordinal);
         Assert.Contains("node_modules/\n", content, StringComparison.Ordinal);
     }
 
@@ -67,7 +69,7 @@ public sealed class GitignoreGuardTests : IDisposable
     [Fact]
     public void EnsureSecretsIgnored_returnsFalse_whenEntriesAlreadyPresent()
     {
-        File.WriteAllText(_path, "secrets.env\n*.env\n");
+        File.WriteAllText(_path, "*.env\n.env.*\n");
 
         var changed = GitignoreGuard.EnsureSecretsIgnored(_path);
 
@@ -77,13 +79,13 @@ public sealed class GitignoreGuardTests : IDisposable
     [Fact]
     public void EnsureSecretsIgnored_addsOnlyTheMissingEntry()
     {
-        File.WriteAllText(_path, "*.env\n"); // already has the wildcard, missing the literal name
+        File.WriteAllText(_path, "*.env\n"); // already has one pattern, missing the dotenv-family one
 
         var changed = GitignoreGuard.EnsureSecretsIgnored(_path);
 
         Assert.True(changed);
         var content = File.ReadAllText(_path);
         Assert.Single(content.Split('\n', StringSplitOptions.RemoveEmptyEntries), l => l.Trim() == "*.env");
-        Assert.Contains("secrets.env", content, StringComparison.Ordinal);
+        Assert.Contains(".env.*", content, StringComparison.Ordinal);
     }
 }

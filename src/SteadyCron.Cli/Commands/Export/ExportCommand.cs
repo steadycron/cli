@@ -31,9 +31,15 @@ public sealed class ExportSettings : CliSettings
     [Description("Stamp this namespace into the exported manifest's 'namespace' field.")]
     public string? Namespace { get; set; }
 
-    [CommandOption("--write-env <PATH>")]
-    [Description("Write a .env scaffold listing every ${...} secret the exported manifest references.")]
-    public string? WriteEnv { get; set; }
+    [CommandOption("--write-env [PATH]")]
+    [Description("Write a .env scaffold listing every ${...} secret the exported manifest references. Defaults to steadycron_secrets.env when no path is given.")]
+    public FlagValue<string>? WriteEnv { get; set; }
+
+    /// <summary>The path to write, or null when <c>--write-env</c> wasn't passed at all.</summary>
+    public string? EffectiveWriteEnvPath =>
+        WriteEnv is not { IsSet: true }
+            ? null
+            : string.IsNullOrWhiteSpace(WriteEnv.Value) ? ManifestEnvironment.DefaultSecretsFile : WriteEnv.Value;
 
     public string EffectiveScope =>
         string.IsNullOrWhiteSpace(Scope) ? "account" : Scope.Trim().ToLowerInvariant();
@@ -140,18 +146,18 @@ public sealed class ExportCommand : SteadyCronCommandBase<ExportSettings>
             }
 
             // Optional .env scaffold for the secret placeholders.
-            if (!string.IsNullOrWhiteSpace(settings.WriteEnv))
+            if (settings.EffectiveWriteEnvPath is { } writeEnvPath)
             {
-                if (File.Exists(settings.WriteEnv))
+                if (File.Exists(writeEnvPath))
                 {
                     output.Error(
-                        $"Refusing to overwrite existing env file '{settings.WriteEnv}' " +
+                        $"Refusing to overwrite existing env file '{writeEnvPath}' " +
                         "(it may already hold secrets). Remove it or choose another path.");
                     return ExitCodes.Error;
                 }
 
-                await File.WriteAllTextAsync(settings.WriteEnv, BuildEnvScaffold(placeholders), ct);
-                output.Success($"Env scaffold written to {settings.WriteEnv} ({placeholders.Count} variable(s)).");
+                await File.WriteAllTextAsync(writeEnvPath, BuildEnvScaffold(placeholders), ct);
+                output.Success($"Env scaffold written to {writeEnvPath} ({placeholders.Count} variable(s)).");
             }
         }
 

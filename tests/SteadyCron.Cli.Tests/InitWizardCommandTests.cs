@@ -154,4 +154,80 @@ public sealed class InitWizardCommandTests
             "github.event_name == 'pull_request' && 'plan' || 'apply'",
             InitWizardCommand.CiWorkflowTemplate, StringComparison.Ordinal);
     }
+
+    // ── steadycron_secrets.env scaffold ────────────────────────────────────────────
+
+    [Fact]
+    public void BuildSecretsEnvContent_noManifestText_hasNoRealNames()
+    {
+        var content = InitWizardCommand.BuildSecretsEnvContent(manifestText: null, out var count);
+
+        Assert.Equal(0, count);
+        Assert.Contains("MY_SECRET_KEY=MY_SECRET_VALUE", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\nSC_", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSecretsEnvContent_freshAccountWithNoSecrets_hasNoRealNames()
+    {
+        const string manifest = "version: 2\nchannels:\n  - name: ops-email\n    kind: email\n    config:\n      to: ops@example.com\n";
+
+        var content = InitWizardCommand.BuildSecretsEnvContent(manifest, out var count);
+
+        Assert.Equal(0, count);
+        Assert.Contains("# Example:", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSecretsEnvContent_realPlaceholders_listsThemAsAssignableLines()
+    {
+        const string manifest = "channels:\n  - name: ops-slack\n    kind: slack\n    config:\n      webhook_url: ${SC_OPS_SLACK_WEBHOOK_URL}\n";
+
+        var content = InitWizardCommand.BuildSecretsEnvContent(manifest, out var count);
+
+        Assert.Equal(1, count);
+        Assert.Contains("SC_OPS_SLACK_WEBHOOK_URL=\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WriteSecretsEnvFile_writesRealPlaceholderNames_toGivenPath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"steadycron-secrets-test-{Guid.NewGuid():N}.env");
+        try
+        {
+            var console = new TestConsole();
+            var output = new OutputContext(json: false, quiet: false, console, console);
+            const string manifest = "variables:\n  - name: api_token\n    value: ${API_TOKEN}\n";
+
+            InitWizardCommand.WriteSecretsEnvFile(output, manifest, path);
+
+            Assert.True(File.Exists(path));
+            Assert.Contains("API_TOKEN=\n", File.ReadAllText(path), StringComparison.Ordinal);
+            Assert.Contains("Wrote", console.Output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void WriteSecretsEnvFile_neverOverwritesAnExistingFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"steadycron-secrets-test-{Guid.NewGuid():N}.env");
+        File.WriteAllText(path, "REAL_SECRET=already-here\n");
+        try
+        {
+            var console = new TestConsole();
+            var output = new OutputContext(json: false, quiet: false, console, console);
+
+            InitWizardCommand.WriteSecretsEnvFile(output, "variables:\n  - name: x\n    value: ${X}\n", path);
+
+            Assert.Equal("REAL_SECRET=already-here\n", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

@@ -1,16 +1,20 @@
 using System.Text;
+using SteadyCron.Cli.Manifest;
 
 namespace SteadyCron.Cli.Infrastructure;
 
 /// <summary>
 /// Appends secret-related entries to <c>.gitignore</c>, idempotently. If <c>init</c>'s exported
 /// manifest ever references <c>${SC_…}</c> secrets (or the user later runs
-/// <c>export --write-env</c>), a committed <c>secrets.env</c> is a real incident — this closes
-/// that gap by default rather than relying on the user to remember it.
+/// <c>export --write-env</c>), a committed secrets file is a real incident — this closes that gap
+/// by default rather than relying on the user to remember it. <c>*.env</c> alone already covers
+/// <see cref="ManifestEnvironment.DefaultSecretsFile"/> (and any bare <c>.env</c>/<c>foo.env</c>);
+/// <c>.env.*</c> additionally covers the common dotenv convention (<c>.env.local</c>,
+/// <c>.env.production</c>) that <c>*.env</c> alone would miss.
 /// </summary>
 public static class GitignoreGuard
 {
-    private static readonly string[] RequiredEntries = ["secrets.env", "*.env"];
+    private static readonly string[] RequiredEntries = ["*.env", ".env.*"];
 
     /// <summary>
     /// Ensures <paramref name="path"/> ignores env-file secrets, creating the file if it doesn't
