@@ -40,7 +40,7 @@ public sealed class AddVariableCommand : AsyncCommand<AddVariableSettings>
                 return ExitCodes.Error;
             }
 
-            name = AnsiConsole.Prompt(new TextPrompt<string>("Variable name:"));
+            name = AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Variable name:")));
         }
 
         name = name.Trim();

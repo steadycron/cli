@@ -65,7 +65,7 @@ public sealed class SignupCommand : SteadyCronCommandBase<SignupSettings>
     {
         while (true)
         {
-            var email = output.Out.Prompt(new TextPrompt<string>("Email:"));
+            var email = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Email:")));
             if (MailAddress.TryCreate(email, out _))
             {
                 return email;
@@ -79,7 +79,7 @@ public sealed class SignupCommand : SteadyCronCommandBase<SignupSettings>
     {
         while (true)
         {
-            var password = output.Out.Prompt(new TextPrompt<string>("Password:").Secret());
+            var password = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Password:")).Secret());
             if (password.Length >= 12)
             {
                 return password;

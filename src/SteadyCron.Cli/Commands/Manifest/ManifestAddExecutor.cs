@@ -48,7 +48,7 @@ internal static class ManifestAddExecutor
         {
             // Non-interactive (e.g. CI/scripts): proceed without asking — this is purely additive,
             // and flags-only invocations must never block on a prompt that can't be answered.
-            if (TerminalHelper.IsInteractive() && !AnsiConsole.Confirm($"{path} doesn't exist. Create it?"))
+            if (TerminalHelper.IsInteractive() && !AnsiConsole.Confirm(PromptFormatting.Marker($"{path} doesn't exist. Create it?")))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;

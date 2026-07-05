@@ -71,8 +71,8 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
         // ── Header ─────────────────────────────────────────────────────────────────
 
-        output.Line($"Overview  {FormatWindow(r.From, r.To)}");
-        output.Line(new string('─', 60));
+        output.Line($"Overview  {FormatWindow(r.From, r.To, output.Glyphs)}");
+        output.Line(new string(output.Glyphs.Rule, 60));
         output.Line();
 
         // ── KPI summary ────────────────────────────────────────────────────────────
@@ -91,8 +91,9 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         string FormatRate(double rate) =>
             rate >= 99.95 || rate == 0 ? $"{rate:F0}%" : $"{rate:F1}%";
 
-        var alertsSub = $"{s.AlertsDelivered} delivered · {s.AlertsFailed} failed" +
-            (s.AlertsSuppressed > 0 ? $" · {s.AlertsSuppressed} suppressed" : "");
+        var bullet = output.Glyphs.Bullet;
+        var alertsSub = $"{s.AlertsDelivered} delivered {bullet} {s.AlertsFailed} failed" +
+            (s.AlertsSuppressed > 0 ? $" {bullet} {s.AlertsSuppressed} suppressed" : "");
 
         var kpi = new Table()
             .Border(TableBorder.None)
@@ -104,29 +105,29 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         kpi.AddRow(
             "[bold]Total checks[/]",
             $"[white]{s.TotalChecks}[/]",
-            $"[grey]{httpChecks} HTTP · {heartbeatChecks} heartbeat[/]");
+            $"{httpChecks} HTTP {bullet} {heartbeatChecks} heartbeat");
 
         kpi.AddRow(
             "[bold]Successful[/]",
             $"[green]{s.SuccessfulChecks}[/]",
-            successRate.HasValue ? $"[grey]{Markup.Escape(FormatRate(successRate.Value))} success rate[/]" : "");
+            successRate.HasValue ? $"{Markup.Escape(FormatRate(successRate.Value))} success rate" : "");
 
         kpi.AddRow(
             "[bold]Incidents[/]",
-            s.FailedChecks > 0 ? $"[red]{s.FailedChecks}[/]" : $"[grey]{s.FailedChecks}[/]",
-            s.FailedChecks == 0 ? "[grey]all clear[/]" : "");
+            s.FailedChecks > 0 ? $"[red]{s.FailedChecks}[/]" : $"{s.FailedChecks}",
+            s.FailedChecks == 0 ? "all clear" : "");
 
         kpi.AddRow(
             "[bold]Alerts[/]",
             $"[white]{s.TotalAlerts}[/]",
-            s.TotalAlerts > 0 ? $"[grey]{Markup.Escape(alertsSub)}[/]" : "");
+            s.TotalAlerts > 0 ? Markup.Escape(alertsSub) : "");
 
         kpi.AddEmptyRow();
 
         kpi.AddRow(
             "[bold]Jobs reporting[/]",
             $"[white]{s.TotalJobsWithActivity} / {s.TotalJobsActive}[/]",
-            s.TotalJobsSilent > 0 ? $"[yellow]{s.TotalJobsSilent} silent[/]" : "[grey]all reporting[/]");
+            s.TotalJobsSilent > 0 ? $"[yellow]{s.TotalJobsSilent} silent[/]" : "all reporting");
 
         output.Render(kpi);
         output.Line();
@@ -145,7 +146,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
         if (attention.Count == 0)
         {
-            output.Markup("[grey]  All systems healthy — no active issues.[/]");
+            output.Markup("  All systems healthy — no active issues.");
             output.Line();
         }
         else
@@ -164,9 +165,9 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
                     Markup.Escape(item.JobName),
                     Markup.Escape(KindLabel(item.Kind)),
                     IssueMarkup(item.Status),
-                    Markup.Escape(DetailText(item.Status, item.Kind, item.LastFailure, item.FailureCount)),
-                    Markup.Escape(HumanSchedule(item.CronExpression, item.IntervalSeconds, item.Timezone)),
-                    Markup.Escape(item.OccurredAt.HasValue ? FormatTs(item.OccurredAt.Value) : "—"));
+                    Markup.Escape(DetailText(item.Status, item.Kind, item.LastFailure, item.FailureCount, output.Glyphs)),
+                    Markup.Escape(HumanSchedule(item.CronExpression, item.IntervalSeconds, item.Timezone, output.Glyphs)),
+                    Markup.Escape(item.OccurredAt.HasValue ? FormatTs(item.OccurredAt.Value) : output.Glyphs.NoValue));
             }
 
             output.Render(tbl);
@@ -216,7 +217,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
                         ? FormatTs(job.LastSeenAt.Value)
                         : job.LastExecutionAt.HasValue
                             ? FormatTs(job.LastExecutionAt.Value)
-                            : "—"));
+                            : output.Glyphs.NoValue));
             }
 
             output.Render(tbl);
@@ -261,10 +262,10 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
                     {
                         tbl.AddRow(
                             Markup.Escape(jAlert.JobName),
-                            Markup.Escape(a.Trigger ?? a.NoticeKind ?? "—"),
+                            Markup.Escape(a.Trigger ?? a.NoticeKind ?? output.Glyphs.NoValue),
                             Markup.Escape(a.ChannelName ?? a.ChannelId.ToString()),
                             AlertStatusMarkup(a.Status),
-                            Markup.Escape(a.DeliveredAt is not null ? FormatTs(a.DeliveredAt.Value) : "—"));
+                            Markup.Escape(a.DeliveredAt is not null ? FormatTs(a.DeliveredAt.Value) : output.Glyphs.NoValue));
                     }
                 }
 
@@ -272,11 +273,11 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
                 {
                     if (!showAll && a.Status is not ("failed" or "suppressed")) { continue; }
                     tbl.AddRow(
-                        "[grey](account)[/]",
-                        Markup.Escape(a.Trigger ?? a.NoticeKind ?? "—"),
+                        "(account)",
+                        Markup.Escape(a.Trigger ?? a.NoticeKind ?? output.Glyphs.NoValue),
                         Markup.Escape(a.ChannelName ?? a.ChannelId.ToString()),
                         AlertStatusMarkup(a.Status),
-                        Markup.Escape(a.DeliveredAt is not null ? FormatTs(a.DeliveredAt.Value) : "—"));
+                        Markup.Escape(a.DeliveredAt is not null ? FormatTs(a.DeliveredAt.Value) : output.Glyphs.NoValue));
                 }
 
                 output.Render(tbl);
@@ -292,18 +293,18 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
             output.Render(new Rule($"[yellow bold]Silent jobs ({r.SilentJobs.Count})[/]").LeftJustified());
 
             var tbl = new Table().Border(TableBorder.Rounded).Expand().BorderColor(Color.Grey);
-            tbl.AddColumn(new TableColumn("[grey]Job[/]"));
-            tbl.AddColumn(new TableColumn("[grey]Kind[/]"));
-            tbl.AddColumn(new TableColumn("[grey]Status[/]"));
-            tbl.AddColumn(new TableColumn("[grey]Next fire[/]").NoWrap());
+            tbl.AddColumn(new TableColumn("Job"));
+            tbl.AddColumn(new TableColumn("Kind"));
+            tbl.AddColumn(new TableColumn("Status"));
+            tbl.AddColumn(new TableColumn("Next fire").NoWrap());
 
             foreach (var j in r.SilentJobs)
             {
                 tbl.AddRow(
-                    $"[grey]{Markup.Escape(j.JobName)}[/]",
-                    $"[grey]{Markup.Escape(KindLabel(j.Kind))}[/]",
+                    Markup.Escape(j.JobName),
+                    Markup.Escape(KindLabel(j.Kind)),
                     JobFormatting.StatusMarkup(j.CurrentStatus),
-                    $"[grey]{Markup.Escape(j.NextFireAt is not null ? FormatTs(j.NextFireAt.Value) : "—")}[/]");
+                    Markup.Escape(j.NextFireAt is not null ? FormatTs(j.NextFireAt.Value) : output.Glyphs.NoValue));
             }
 
             output.Render(tbl);
@@ -372,12 +373,12 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
     };
 
     // Mirrors web's detailText().
-    private static string DetailText(string status, string kind, ReportLastFailure? f, int failureCount)
+    private static string DetailText(string status, string kind, ReportLastFailure? f, int failureCount, Glyphs glyphs)
     {
         string reason;
         if (f?.HttpStatusCode is { } code)
         {
-            reason = $"HTTP {code}" + (f.ErrorMessage is not null ? $" · {f.ErrorMessage}" : "");
+            reason = $"HTTP {code}" + (f.ErrorMessage is not null ? $" {glyphs.Bullet} {f.ErrorMessage}" : "");
         }
         else if (f?.ErrorMessage is not null)
         {
@@ -395,21 +396,21 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
                 "abandoned" => "Started but never completed",
                 "late" => kind == "heartbeat" ? "Check-in overdue" : "Run overdue",
                 "failure" => "Execution failed",
-                _ => "—",
+                _ => glyphs.NoValue,
             };
         }
 
-        return failureCount > 1 ? $"{reason} · {failureCount}× failed" : reason;
+        return failureCount > 1 ? $"{reason} {glyphs.Bullet} {failureCount}{glyphs.Times} failed" : reason;
     }
 
     // Mirrors web's humanSchedule().
-    private static string HumanSchedule(string? cron, int? intervalSeconds, string? timezone)
+    private static string HumanSchedule(string? cron, int? intervalSeconds, string? timezone, Glyphs glyphs)
     {
         if (cron is not null)
         {
             var tz = timezone ?? "";
             var tzAbbrev = tz.Contains('/') ? tz[(tz.LastIndexOf('/') + 1)..] : tz;
-            return $"{cron} · {tzAbbrev}";
+            return $"{cron} {glyphs.Bullet} {tzAbbrev}";
         }
 
         if (intervalSeconds is { } s)
@@ -419,7 +420,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
             return $"Every {s / 3600}h";
         }
 
-        return "—";
+        return glyphs.NoValue;
     }
 
     private static string KindLabel(string kind) =>
@@ -427,33 +428,36 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
     private static void RenderFailedJob(ReportJobSummary job, bool verbose, OutputContext output)
     {
+        var bullet = output.Glyphs.Bullet;
+        var arrow = output.Glyphs.Arrow;
+
         var tags = job.Tags.Count > 0
-            ? "  [grey]" + string.Join(" ", job.Tags.Select(t => Markup.Escape($"[{t.Key}:{t.Value}]"))) + "[/]"
+            ? "  " + string.Join(" ", job.Tags.Select(t => Markup.Escape($"[{t.Key}:{t.Value}]")))
             : "";
 
-        output.Markup($"  [red bold]{OutputContext.Escape(job.JobName)}[/]{tags}  [grey]{job.Kind}[/]");
+        output.Markup($"  [red bold]{OutputContext.Escape(job.JobName)}[/]{tags}  {job.Kind}");
 
         if (job.LastFailure is { } f)
         {
-            var httpPart = f.HttpStatusCode is not null ? $" · HTTP {f.HttpStatusCode}" : "";
-            var durationPart = f.DurationMs is not null ? $" · {f.DurationMs}ms" : "";
-            var attemptPart = $" · attempt {f.Attempt}" + (!f.IsFinalAttempt ? " (retrying)" : "");
-            output.Markup($"  [grey]Last failure:[/] [white]{OutputContext.Escape(FormatTs(f.OccurredAt))}[/]{httpPart}{durationPart}{attemptPart}");
+            var httpPart = f.HttpStatusCode is not null ? $" {bullet} HTTP {f.HttpStatusCode}" : "";
+            var durationPart = f.DurationMs is not null ? $" {bullet} {f.DurationMs}ms" : "";
+            var attemptPart = $" {bullet} attempt {f.Attempt}" + (!f.IsFinalAttempt ? " (retrying)" : "");
+            output.Markup($"  Last failure: [white]{OutputContext.Escape(FormatTs(f.OccurredAt))}[/]{httpPart}{durationPart}{attemptPart}");
 
             if (f.ErrorKind is not null || f.ErrorMessage is not null)
             {
                 var err = string.IsNullOrWhiteSpace(f.ErrorMessage) ? f.ErrorKind : f.ErrorMessage;
-                output.Markup($"  [grey]Error:[/]        [red]{OutputContext.Escape(err ?? "")}[/]" +
+                output.Markup($"  Error:        [red]{OutputContext.Escape(err ?? "")}[/]" +
                               (f.ErrorKind is not null && f.ErrorMessage is not null
-                                  ? $" [grey]({OutputContext.Escape(f.ErrorKind)})[/]"
+                                  ? $" ({OutputContext.Escape(f.ErrorKind)})"
                                   : ""));
             }
 
             if (verbose && f.ResponseBody is not null)
             {
                 var body = f.ResponseBody.Length > 500 ? f.ResponseBody[..500] + "…" : f.ResponseBody;
-                output.Markup($"  [grey]Response:[/]     {OutputContext.Escape(body)}" +
-                              (f.ResponseBodyTruncated ? " [grey](truncated)[/]" : ""));
+                output.Markup($"  Response:     {OutputContext.Escape(body)}" +
+                              (f.ResponseBodyTruncated ? " (truncated)" : ""));
             }
         }
 
@@ -465,39 +469,39 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
             if (delivered.Count > 0)
             {
                 var channels = string.Join(", ", delivered.Select(a =>
-                    $"{OutputContext.Escape(a.ChannelName ?? "?")} [grey]({OutputContext.Escape(a.Trigger ?? "?")})[/]"));
-                output.Markup($"  [grey]Alerts:[/]       [green]delivered → {channels}[/]");
+                    $"{OutputContext.Escape(a.ChannelName ?? "?")} ({OutputContext.Escape(a.Trigger ?? "?")})"));
+                output.Markup($"  Alerts:       [green]delivered {arrow} {channels}[/]");
             }
 
             if (failed.Count > 0)
             {
                 var channels = string.Join(", ", failed.Select(a =>
-                    $"{OutputContext.Escape(a.ChannelName ?? "?")} [grey]({OutputContext.Escape(a.Status)})[/]"));
-                output.Markup($"  [grey]Alerts:[/]       [red]problem → {channels}[/]");
+                    $"{OutputContext.Escape(a.ChannelName ?? "?")} ({OutputContext.Escape(a.Status)})"));
+                output.Markup($"  Alerts:       [red]problem {arrow} {channels}[/]");
             }
         }
         else
         {
-            output.Markup($"  [grey]Alerts:[/]       [yellow]none configured for this job[/]");
+            output.Markup($"  Alerts:       [yellow]none configured for this job[/]");
         }
 
         if (job.FailureCount > 1)
         {
-            output.Markup($"  [grey]Total failures in window:[/] [red]{job.FailureCount}[/]  [grey](success: {job.SuccessCount})[/]");
+            output.Markup($"  Total failures in window: [red]{job.FailureCount}[/]  (success: {job.SuccessCount})");
         }
     }
 
-    private static string FormatWindow(DateTimeOffset from, DateTimeOffset to)
+    private static string FormatWindow(DateTimeOffset from, DateTimeOffset to, Glyphs glyphs)
     {
         var f = from.ToLocalTime();
         var t = to.ToLocalTime();
         var offset = f.ToString("zzz");
         if (f.Date == t.Date)
         {
-            return $"{f:yyyy-MM-dd HH:mm} → {t:HH:mm} ({offset})";
+            return $"{f:yyyy-MM-dd HH:mm} {glyphs.Arrow} {t:HH:mm} ({offset})";
         }
 
-        return $"{f:yyyy-MM-dd HH:mm} → {t:yyyy-MM-dd HH:mm} ({offset})";
+        return $"{f:yyyy-MM-dd HH:mm} {glyphs.Arrow} {t:yyyy-MM-dd HH:mm} ({offset})";
     }
 
     private static string FormatTs(DateTimeOffset value) =>
@@ -509,6 +513,6 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         "failed" => "[red]failed[/]",
         "suppressed" => "[yellow]suppressed[/]",
         "pending" or "delivering" => "[blue]pending[/]",
-        _ => $"[grey]{Markup.Escape(status)}[/]",
+        _ => Markup.Escape(status),
     };
 }

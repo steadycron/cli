@@ -29,10 +29,12 @@ public sealed class InitCommand : Command<InitSettings>
             return ExitCodes.Ok;
         }
 
+        var glyphs = Glyphs.For(AnsiConsole.Console);
+
         if (File.Exists(settings.OutputFile))
         {
             AnsiConsole.MarkupLineInterpolated(
-                $"[red]✗[/] File already exists: {settings.OutputFile}. Delete it or choose a different path.");
+                $"[{Styles.Error}]{glyphs.Error}[/] File already exists: {settings.OutputFile}. Delete it or choose a different path.");
             return ExitCodes.Error;
         }
 
@@ -41,16 +43,16 @@ public sealed class InitCommand : Command<InitSettings>
         if (settings.Terraform)
         {
             AnsiConsole.MarkupLineInterpolated(
-                $"[green]✓[/] Terraform boilerplate written to [bold]{settings.OutputFile}[/]");
+                $"[{Styles.Success}]{glyphs.Success}[/] Terraform boilerplate written to [{Styles.Critical}]{settings.OutputFile}[/]");
             AnsiConsole.MarkupLine(
-                "Run [bold]terraform init && terraform plan[/] to preview, then [bold]terraform apply[/] to provision.");
+                $"Run [{Styles.Command}]terraform init && terraform plan[/] to preview, then [{Styles.Command}]terraform apply[/] to provision.");
         }
         else
         {
             AnsiConsole.MarkupLineInterpolated(
-                $"[green]✓[/] YAML manifest written to [bold]{settings.OutputFile}[/]");
+                $"[{Styles.Success}]{glyphs.Success}[/] YAML manifest written to [{Styles.Critical}]{settings.OutputFile}[/]");
             AnsiConsole.MarkupLine(
-                "Run [bold]steadycron plan steadycron.yaml[/] to preview, then [bold]steadycron apply steadycron.yaml[/] to apply.");
+                $"Run [{Styles.Command}]steadycron plan steadycron.yaml[/] to preview, then [{Styles.Command}]steadycron apply steadycron.yaml[/] to apply.");
         }
 
         return ExitCodes.Ok;

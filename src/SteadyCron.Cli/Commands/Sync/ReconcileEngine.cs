@@ -85,8 +85,8 @@ public sealed class ReconcileEngine
 
         var paths = string.Join(", ", settings.EffectivePaths);
         output.Markup(
-            $"[bold]SteadyCron sync[/] [grey]· {OutputContext.Escape(paths)} → " +
-            $"{OutputContext.Escape(apiUrl)}[/]\n");
+            $"[bold]SteadyCron sync[/] {output.Glyphs.Bullet} {OutputContext.Escape(paths)} {output.Glyphs.Arrow} " +
+            $"{OutputContext.Escape(apiUrl)}\n");
 
         ReconcilePlanRenderer.Render(output, planResponse);
 
@@ -115,7 +115,7 @@ public sealed class ReconcileEngine
         if (!isYes && IsInteractive())
         {
             output.Line();
-            if (!output.Out.Confirm("Apply these changes?", defaultValue: false))
+            if (!output.Out.Confirm(PromptFormatting.Marker("Apply these changes?"), defaultValue: false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;
@@ -240,8 +240,8 @@ public sealed class ReconcileEngine
 
         output.Line();
         output.Markup(newMonitors.Count == 1
-            ? "[grey]Heartbeat ping URLs for the new monitor:[/]"
-            : $"[grey]Heartbeat ping URLs for {newMonitors.Count} new monitors:[/]");
+            ? "Heartbeat ping URLs for the new monitor:"
+            : $"Heartbeat ping URLs for {newMonitors.Count} new monitors:");
         output.Line();
 
         foreach (var job in newMonitors)

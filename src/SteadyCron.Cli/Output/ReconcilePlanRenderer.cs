@@ -12,6 +12,8 @@ public static class ReconcilePlanRenderer
 {
     public static void Render(OutputContext output, ReconcileResponse plan)
     {
+        var arrow = output.Glyphs.Arrow;
+
         foreach (var change in plan.Changes)
         {
             switch (change.Action)
@@ -27,8 +29,8 @@ public static class ReconcilePlanRenderer
                     foreach (var diff in change.Diff ?? [])
                     {
                         output.Markup(
-                            $"    [grey]{OutputContext.Escape(diff.Field)}:[/] " +
-                            $"{OutputContext.Escape(diff.From ?? "(none)")} [grey]→[/] {OutputContext.Escape(diff.To ?? "(none)")}");
+                            $"    {OutputContext.Escape(diff.Field)}: " +
+                            $"{OutputContext.Escape(diff.From ?? "(none)")} {arrow} {OutputContext.Escape(diff.To ?? "(none)")}");
                     }
                     break;
 
@@ -68,7 +70,7 @@ public static class ReconcilePlanRenderer
 
         if (summary.NoChange > 0)
         {
-            parts.Add($"[grey]{summary.NoChange} unchanged[/]");
+            parts.Add($"{summary.NoChange} unchanged");
         }
 
         if (plan.Errors.Count > 0)
@@ -80,5 +82,5 @@ public static class ReconcilePlanRenderer
     }
 
     private static string RenderMeta(string resource) =>
-        $"[grey]({OutputContext.Escape(resource)})[/]";
+        $"({OutputContext.Escape(resource)})";
 }

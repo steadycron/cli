@@ -234,7 +234,8 @@ app.Configure(config =>
 
     config.SetExceptionHandler((ex, _) =>
     {
-        AnsiConsole.MarkupLineInterpolated($"[red]✗ Unexpected error:[/] {ex.Message}");
+        var glyphs = Glyphs.For(AnsiConsole.Console);
+        AnsiConsole.MarkupLineInterpolated($"[{Styles.Error}]{glyphs.Error} Unexpected error:[/] {ex.Message}");
         return ExitCodes.Error;
     });
 });

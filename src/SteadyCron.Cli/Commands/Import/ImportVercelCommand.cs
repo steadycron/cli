@@ -75,7 +75,7 @@ public sealed class ImportVercelCommand : AsyncCommand<ImportVercelSettings>
         if (settings.DryRun)
         {
             output.Err.MarkupLine(
-                $"[grey]{result.Jobs.Count} http (UTC), 0 heartbeat, 0 skipped  " +
+                $"[{Styles.Hint}]{result.Jobs.Count} http (UTC), 0 heartbeat, 0 skipped  " +
                 $"(source: {Markup.Escape(settings.EffectivePath)})[/]");
             return ExitCodes.Ok;
         }

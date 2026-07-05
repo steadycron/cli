@@ -80,7 +80,7 @@ public sealed class ChannelsListCommand : SteadyCronCommandBase<CliSettings>
                 Markup.Escape(c.Name),
                 Markup.Escape(c.Kind),
                 Markup.Escape(ChannelLookup.DescribeConfig(c)),
-                $"[grey]{c.Id}[/]");
+                c.Id.ToString());
         }
 
         output.Render(table);
@@ -281,7 +281,7 @@ public sealed class ChannelDeleteCommand : SteadyCronCommandBase<ChannelDeleteSe
 
         if (!settings.Yes && !settings.Json && !Console.IsInputRedirected)
         {
-            if (!output.Out.Confirm($"Delete channel '{Markup.Escape(channel.Name)}' ({channel.Kind})?", false))
+            if (!output.Out.Confirm(PromptFormatting.Marker($"Delete channel '{Markup.Escape(channel.Name)}' ({channel.Kind})?"), false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;

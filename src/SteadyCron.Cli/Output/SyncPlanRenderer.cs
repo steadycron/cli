@@ -8,35 +8,37 @@ public static class SyncPlanRenderer
 {
     public static void Render(OutputContext output, SyncPlan plan, bool prune)
     {
+        var arrow = output.Glyphs.Arrow;
+
         foreach (var create in plan.Creates)
         {
-            output.Markup($"[green]+ create[/] {OutputContext.Escape(create.Desired.Name)} [grey]({create.Desired.Kind})[/]");
+            output.Markup($"[green]+ create[/] {OutputContext.Escape(create.Desired.Name)} ({create.Desired.Kind})");
         }
 
         foreach (var update in plan.ChangedUpdates)
         {
-            output.Markup($"[yellow]~ update[/] {OutputContext.Escape(update.Desired.Name)} [grey]({update.Desired.Kind})[/]");
+            output.Markup($"[yellow]~ update[/] {OutputContext.Escape(update.Desired.Name)} ({update.Desired.Kind})");
             foreach (var change in update.Changes)
             {
-                output.Markup($"    [grey]{OutputContext.Escape(change.Field)}:[/] {OutputContext.Escape(change.From)} [grey]→[/] {OutputContext.Escape(change.To)}");
+                output.Markup($"    {OutputContext.Escape(change.Field)}: {OutputContext.Escape(change.From)} {arrow} {OutputContext.Escape(change.To)}");
             }
 
             switch (update.Pause)
             {
                 case PauseTransition.Pause:
-                    output.Markup("    [grey]state:[/] active [grey]→[/] paused");
+                    output.Markup($"    state: active {arrow} paused");
                     break;
                 case PauseTransition.Resume:
-                    output.Markup("    [grey]state:[/] paused [grey]→[/] active");
+                    output.Markup($"    state: paused {arrow} active");
                     break;
             }
         }
 
         foreach (var orphan in plan.Orphans)
         {
-            var suffix = prune ? "[red](will be deleted)[/]" : "[grey](not in manifest; use --prune to delete)[/]";
-            var glyph = prune ? "[red]- delete[/]" : "[grey]- orphan[/]";
-            output.Markup($"{glyph} {OutputContext.Escape(orphan.Server.Name)} [grey]({orphan.Server.Kind})[/] {suffix}");
+            var suffix = prune ? "[red](will be deleted)[/]" : "(not in manifest; use --prune to delete)";
+            var glyph = prune ? "[red]- delete[/]" : "- orphan";
+            output.Markup($"{glyph} {OutputContext.Escape(orphan.Server.Name)} ({orphan.Server.Kind}) {suffix}");
         }
 
         foreach (var conflict in plan.Conflicts)
@@ -61,12 +63,12 @@ public static class SyncPlanRenderer
         }
         else if (plan.Orphans.Count > 0)
         {
-            parts.Add($"[grey]{plan.Orphans.Count} orphaned[/]");
+            parts.Add($"{plan.Orphans.Count} orphaned");
         }
 
         if (plan.NoOps.Count > 0)
         {
-            parts.Add($"[grey]{plan.NoOps.Count} unchanged[/]");
+            parts.Add($"{plan.NoOps.Count} unchanged");
         }
 
         if (plan.Conflicts.Count > 0)

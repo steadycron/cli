@@ -183,14 +183,14 @@ file static class BulkHelper
         output.Markup($"Will [bold]{verb}[/] {targets.Count} job(s):");
         foreach (var j in targets)
         {
-            output.Markup($"  [grey]·[/] {OutputContext.Escape(j.Name)}");
+            output.Markup($"  {output.Glyphs.Bullet} {OutputContext.Escape(j.Name)}");
         }
 
         output.Line();
 
         if (!settings.Yes && !Console.IsInputRedirected && !Console.IsOutputRedirected)
         {
-            if (!AnsiConsole.Confirm("Continue?", defaultValue: false))
+            if (!AnsiConsole.Confirm(PromptFormatting.Marker("Continue?"), defaultValue: false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;
@@ -208,7 +208,7 @@ file static class BulkHelper
             var skip = skipReason(j);
             if (skip is not null)
             {
-                output.Markup($"  [grey]skip[/]  {OutputContext.Escape(j.Name)} [grey]({skip})[/]");
+                output.Markup($"  skip   {OutputContext.Escape(j.Name)} ({skip})");
                 skipped++;
                 continue;
             }
@@ -216,12 +216,12 @@ file static class BulkHelper
             try
             {
                 await action(j);
-                output.Markup($"  [green]✓[/]     {OutputContext.Escape(j.Name)}");
+                output.Markup($"  [{Styles.Success}]{output.Glyphs.Success}[/]      {OutputContext.Escape(j.Name)}");
                 succeeded++;
             }
             catch (Exception ex)
             {
-                output.Markup($"  [red]✗[/]     {OutputContext.Escape(j.Name)} [grey]({OutputContext.Escape(ex.Message)})[/]");
+                output.Markup($"  [{Styles.Error}]{output.Glyphs.Error}[/]      {OutputContext.Escape(j.Name)} ({OutputContext.Escape(ex.Message)})");
                 failed++;
             }
         }

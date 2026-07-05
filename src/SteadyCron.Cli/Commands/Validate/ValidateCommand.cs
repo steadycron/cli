@@ -43,6 +43,8 @@ public sealed class ValidateCommand : Command<ValidateSettings>
 
     public override int Execute(CommandContext context, ValidateSettings settings)
     {
+        var glyphs = Glyphs.For(AnsiConsole.Console);
+
         ManifestFile manifest;
         try
         {
@@ -51,7 +53,7 @@ public sealed class ValidateCommand : Command<ValidateSettings>
             var envFiles = ManifestEnvironment.ResolveEnvFiles(settings.EnvFileList);
             if (envFiles.Count > 0 && settings.EnvFileList.Count == 0)
             {
-                AnsiConsole.MarkupLineInterpolated($"[grey]Using secrets from {envFiles[0]}[/]");
+                AnsiConsole.MarkupLineInterpolated($"[{Styles.Hint}]Using secrets from {envFiles[0]}[/]");
             }
 
             var getVar = ManifestEnvironment.Build(
@@ -61,14 +63,14 @@ public sealed class ValidateCommand : Command<ValidateSettings>
         }
         catch (ManifestException ex)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {ex.Message}");
+            AnsiConsole.MarkupLineInterpolated($"[{Styles.Error}]{glyphs.Error}[/] {ex.Message}");
             return ExitCodes.ManifestError;
         }
 
         if (!settings.NoWarnV1 && ManifestLoader.IsV1(manifest))
         {
             AnsiConsole.MarkupLine(
-                "[yellow]⚠ Manifest version 1 is deprecated.[/] Run [bold]steadycron export[/] to upgrade to v2.");
+                $"[{Styles.Warning}]! Manifest version 1 is deprecated.[/] Run [{Styles.Command}]steadycron export[/] to upgrade to v2.");
         }
 
         var result = _validator.Validate(manifest);
@@ -85,13 +87,13 @@ public sealed class ValidateCommand : Command<ValidateSettings>
             if (tagCount > 0) { summary.Add($"[green]{tagCount} tag(s)[/]"); }
             if (varCount > 0) { summary.Add($"[green]{varCount} variable(s)[/]"); }
 
-            AnsiConsole.MarkupLine($"[green]✓ Manifest is valid.[/] {string.Join(", ", summary)}");
+            AnsiConsole.MarkupLine($"[{Styles.Success}]{glyphs.Success} Manifest is valid.[/] {string.Join(", ", summary)}");
             return ExitCodes.Ok;
         }
 
         foreach (var error in result.Errors)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {error}");
+            AnsiConsole.MarkupLineInterpolated($"[{Styles.Error}]{glyphs.Error}[/] {error}");
         }
 
         AnsiConsole.MarkupLine(

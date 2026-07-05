@@ -151,7 +151,7 @@ public sealed class VarDeleteCommand : SteadyCronCommandBase<VarDeleteSettings>
 
         if (!settings.Yes && !settings.Json && !Console.IsInputRedirected)
         {
-            if (!output.Out.Confirm($"Delete variable '{Markup.Escape(variable.Name)}'?", false))
+            if (!output.Out.Confirm(PromptFormatting.Marker($"Delete variable '{Markup.Escape(variable.Name)}'?"), false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;

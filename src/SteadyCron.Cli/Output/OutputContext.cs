@@ -27,6 +27,7 @@ public sealed class OutputContext
             Out = new AnsiConsoleOutput(Console.Error),
             ColorSystem = colors,
         });
+        Glyphs = Glyphs.For(Out);
     }
 
     /// <summary>Test seam: inject consoles directly (e.g. Spectre.Console.Testing's <c>TestConsole</c>)
@@ -37,6 +38,7 @@ public sealed class OutputContext
         Quiet = quiet;
         Out = @out;
         Err = err;
+        Glyphs = Glyphs.For(Out);
     }
 
     public bool Json { get; }
@@ -48,6 +50,9 @@ public sealed class OutputContext
 
     /// <summary>Diagnostics console (stderr).</summary>
     public IAnsiConsole Err { get; }
+
+    /// <summary>Status glyphs, resolved against <see cref="Out"/>'s detected Unicode support.</summary>
+    public Glyphs Glyphs { get; }
 
     /// <summary>
     /// Writes a JSON document to stdout verbatim (no markup interpretation). Always emitted.
@@ -100,6 +105,11 @@ public sealed class OutputContext
         Out.MarkupLine(markup);
     }
 
+    /// <summary>
+    /// A secondary status aside — a row count, "Aborted.", "Stopped." — never the primary answer
+    /// to the command, just context around it. This is the one deliberate use of
+    /// <see cref="Styles.Hint"/> outside default-value hints and footnotes; see docs/style-guide.md.
+    /// </summary>
     public void Info(string message)
     {
         if (Quiet || Json)
@@ -107,7 +117,7 @@ public sealed class OutputContext
             return;
         }
 
-        Out.MarkupLine($"[grey]{Escape(message)}[/]");
+        Out.MarkupLine($"[{Styles.Hint}]{Escape(message)}[/]");
     }
 
     public void Success(string message)
@@ -117,21 +127,21 @@ public sealed class OutputContext
             return;
         }
 
-        Out.MarkupLine($"[green]✓[/] {Escape(message)}");
+        Out.MarkupLine($"[{Styles.Success}]{Glyphs.Success}[/] {Escape(message)}");
     }
 
     /// <summary>Warnings always go to stderr so stdout (data) stays clean.</summary>
     public void Warn(string message) =>
-        Err.MarkupLine($"[yellow]![/] {Escape(message)}");
+        Err.MarkupLine($"[{Styles.Warning}]![/] {Escape(message)}");
 
     /// <summary>Errors always go to stderr.</summary>
     public void Error(string message) =>
-        Err.MarkupLine($"[red]✗[/] {Escape(message)}");
+        Err.MarkupLine($"[{Styles.Error}]{Glyphs.Error}[/] {Escape(message)}");
 
     public void ApiError(SteadyCronApiException ex)
     {
-        var code = ex.ErrorCode is null ? string.Empty : $" [grey]({Escape(ex.ErrorCode)})[/]";
-        Err.MarkupLine($"[red]✗[/] {Escape(ex.Message)}{code}");
+        var code = ex.ErrorCode is null ? string.Empty : $" ({Escape(ex.ErrorCode)})";
+        Err.MarkupLine($"[{Styles.Error}]{Glyphs.Error}[/] {Escape(ex.Message)}{code}");
     }
 
     /// <summary>

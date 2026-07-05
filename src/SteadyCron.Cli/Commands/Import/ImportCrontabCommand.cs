@@ -80,7 +80,7 @@ public sealed class ImportCrontabCommand : AsyncCommand<ImportCrontabSettings>
         if (settings.DryRun)
         {
             output.Err.MarkupLine(
-                $"[grey]{result.HttpCount} http, {result.HeartbeatCount} heartbeat, " +
+                $"[{Styles.Hint}]{result.HttpCount} http, {result.HeartbeatCount} heartbeat, " +
                 $"{result.SkippedCount} skipped  (source: {Markup.Escape(sourceName)})[/]");
             return ExitCodes.Ok;
         }
@@ -120,13 +120,13 @@ public sealed class ImportCrontabCommand : AsyncCommand<ImportCrontabSettings>
         foreach (var job in result.Jobs.Where(j => j.Kind == "heartbeat"))
         {
             output.Err.MarkupLineInterpolated(
-                $"[yellow]![/] Heartbeat [bold]{job.Name ?? job.Id ?? "?"}[/] (id: {job.Id ?? "?"})");
+                $"[{Styles.Warning}]![/] Heartbeat [bold]{job.Name ?? job.Id ?? "?"}[/] (id: {job.Id ?? "?"})");
             output.Err.MarkupLine(
                 "   After sync, append this to your cron command:");
             output.Err.MarkupLine(
-                "   [grey]&& curl -fsS 'https://ping.steadycron.com/<TOKEN>'[/]");
+                $"   [{Styles.PingSnippet}]&& curl -fsS 'https://ping.steadycron.com/<TOKEN>'[/]");
             output.Err.MarkupLine(
-                $"   [grey](<TOKEN> available after: steadycron jobs get {Markup.Escape(job.Id ?? "?")})[/]");
+                $"   [{Styles.Hint}](<TOKEN> available after: steadycron jobs get {Markup.Escape(job.Id ?? "?")})[/]");
         }
 
         return ExitCodes.Ok;

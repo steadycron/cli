@@ -33,18 +33,18 @@ internal static class LogbookFormatting
         _ => element.ToString(),
     };
 
-    internal static string SeverityDot(string severity) => severity switch
+    internal static string SeverityDot(string severity, Glyphs glyphs) => severity switch
     {
-        "critical" => "[red]●[/]",
-        "warning" => "[yellow]●[/]",
-        _ => "[grey]●[/]",
+        "critical" => $"[red]{glyphs.Dot}[/]",
+        "warning" => $"[yellow]{glyphs.Dot}[/]",
+        _ => $"[{Styles.Hint}]{glyphs.Dot}[/]",
     };
 
-    internal static string SeverityLabel(string severity) => severity switch
+    internal static string SeverityLabel(string severity, Glyphs glyphs) => severity switch
     {
-        "critical" => "[red bold]● critical[/]",
-        "warning" => "[yellow]● warning[/]",
-        _ => "[grey]● info[/]",
+        "critical" => $"[red bold]{glyphs.Dot} critical[/]",
+        "warning" => $"[yellow]{glyphs.Dot} warning[/]",
+        _ => $"[{Styles.Hint}]{glyphs.Dot} info[/]",
     };
 
     private static readonly Dictionary<string, string> EventLabels = new(StringComparer.Ordinal)

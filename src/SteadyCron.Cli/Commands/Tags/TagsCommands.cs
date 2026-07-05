@@ -69,7 +69,7 @@ public sealed class TagsListCommand : SteadyCronCommandBase<CliSettings>
                 Markup.Escape(t.Display),
                 Markup.Escape(t.Color ?? "auto"),
                 t.JobCount.ToString(),
-                $"[grey]{t.Id}[/]");
+                t.Id.ToString());
         }
 
         output.Render(table);
@@ -139,7 +139,7 @@ public sealed class TagDeleteCommand : SteadyCronCommandBase<TagDeleteSettings>
 
         if (!settings.Yes && !settings.Json && !Console.IsInputRedirected)
         {
-            if (!output.Out.Confirm($"Delete tag '{Markup.Escape(tag.Display)}' (used by {tag.JobCount} job(s))?", false))
+            if (!output.Out.Confirm(PromptFormatting.Marker($"Delete tag '{Markup.Escape(tag.Display)}' (used by {tag.JobCount} job(s))?"), false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;

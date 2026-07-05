@@ -29,8 +29,8 @@ public sealed class LoginCommand : SteadyCronCommandBase<CliSettings>
         var config = ResolveConfig(settings);
         var client = ClientFactory.CreateUnauthenticated(config);
 
-        var email = output.Out.Prompt(new TextPrompt<string>("Email:"));
-        var password = output.Out.Prompt(new TextPrompt<string>("Password:").Secret());
+        var email = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Email:")));
+        var password = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Password:")).Secret());
 
         CliProvisioningData provisioning;
         try
@@ -49,7 +49,7 @@ public sealed class LoginCommand : SteadyCronCommandBase<CliSettings>
 
         output.Line();
         output.Markup(
-            "[grey]Optional hygiene: stale cli-* keys from other machines can be revoked from the dashboard.[/]");
+            $"[{Styles.Hint}]Optional hygiene: stale cli-* keys from other machines can be revoked from the dashboard.[/]");
 
         return ExitCodes.Ok;
     }

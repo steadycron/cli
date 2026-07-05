@@ -96,7 +96,7 @@ public sealed class AddChannelCommand : AsyncCommand<AddChannelSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new SelectionPrompt<string>().Title("Kind:").AddChoices(ManifestSchema.ChannelKinds));
+        return AnsiConsole.Prompt(new SelectionPrompt<string>().Title(PromptFormatting.Marker("Kind:")).AddChoices(ManifestSchema.ChannelKinds));
     }
 
     private static string? ResolveName(AddChannelSettings settings, bool interactive, OutputContext output)
@@ -112,7 +112,7 @@ public sealed class AddChannelCommand : AsyncCommand<AddChannelSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new TextPrompt<string>("Channel name:"));
+        return AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Channel name:")));
     }
 
     private static string? ResolveTo(AddChannelSettings settings, bool interactive, OutputContext output)
@@ -128,6 +128,6 @@ public sealed class AddChannelCommand : AsyncCommand<AddChannelSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new TextPrompt<string>("Email address:"));
+        return AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Email address:")));
     }
 }

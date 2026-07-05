@@ -93,10 +93,10 @@ public sealed class RulesListCommand : SteadyCronCommandBase<RulesListSettings>
                 Markup.Escape(r.Trigger),
                 Markup.Escape(r.Severity),
                 Markup.Escape(ch?.Name ?? r.ChannelId.ToString()),
-                Markup.Escape(ch?.Kind ?? "—"),
-                Markup.Escape(ch is not null ? ChannelLookup.DescribeConfig(ch) : "—"),
+                Markup.Escape(ch?.Kind ?? output.Glyphs.NoValue),
+                Markup.Escape(ch is not null ? ChannelLookup.DescribeConfig(ch) : output.Glyphs.NoValue),
                 Markup.Escape($"{r.DedupWindowSeconds}s"),
-                $"[grey]{r.Id}[/]");
+                r.Id.ToString());
         }
 
         output.Render(table);
@@ -195,7 +195,7 @@ public sealed class RuleAddCommand : SteadyCronCommandBase<RuleAddSettings>
             return ExitCodes.Ok;
         }
 
-        output.Success($"Added {rule.Trigger} → '{channel.Name}' on '{job.Name}' ({rule.Id}).");
+        output.Success($"Added {rule.Trigger} {output.Glyphs.Arrow} '{channel.Name}' on '{job.Name}' ({rule.Id}).");
         return ExitCodes.Ok;
     }
 }
@@ -226,7 +226,7 @@ public sealed class RuleDeleteCommand : SteadyCronCommandBase<RuleDeleteSettings
 
         if (!settings.Yes && !settings.Json && !Console.IsInputRedirected)
         {
-            if (!output.Out.Confirm($"Delete alert rule {id}?", false))
+            if (!output.Out.Confirm(PromptFormatting.Marker($"Delete alert rule {id}?"), false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;
@@ -270,26 +270,27 @@ public sealed class RulesTestCommand : SteadyCronCommandBase<RulesTestSettings>
         var channels = (await client.ListChannelsAsync(ct)).ToDictionary(c => c.Id);
 
         var anyFailed = false;
+        var arrow = output.Glyphs.Arrow;
         foreach (var channelId in uniqueChannelIds)
         {
             channels.TryGetValue(channelId, out var ch);
             var label = ch is not null
-                ? $"{ch.Name} ({ch.Kind} → {ChannelLookup.DescribeConfig(ch)})"
+                ? $"{ch.Name} ({ch.Kind} {arrow} {ChannelLookup.DescribeConfig(ch)})"
                 : channelId.ToString();
 
             try
             {
                 await client.TestChannelAsync(channelId, ct);
-                output.Success($"Test alert sent → {label}");
+                output.Success($"Test alert sent {arrow} {label}");
             }
             catch (SteadyCronApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                output.Warn($"Rate limited   → {label}: email send limit reached, try again later.");
+                output.Warn($"Rate limited   {arrow} {label}: email send limit reached, try again later.");
                 anyFailed = true;
             }
             catch (SteadyCronApiException ex)
             {
-                output.Error($"Failed         → {label}: {ex.Message}");
+                output.Error($"Failed         {arrow} {label}: {ex.Message}");
                 anyFailed = true;
             }
         }

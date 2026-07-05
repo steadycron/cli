@@ -150,9 +150,9 @@ public static class JobFormatting
             output.Markup($"  [bold]{Markup.Escape(name)}[/]");
         }
 
-        output.Markup($"  [grey]success[/]  {Markup.Escape(urls.Success)}");
-        output.Markup($"  [grey]start  [/]  {Markup.Escape(urls.Start)}");
-        output.Markup($"  [grey]fail   [/]  {Markup.Escape(urls.Fail)}");
+        output.Markup($"  success  {Markup.Escape(urls.Success)}");
+        output.Markup($"  start    {Markup.Escape(urls.Start)}");
+        output.Markup($"  fail     {Markup.Escape(urls.Fail)}");
     }
 
     private const string PingRecipesUrl = "https://steadycron.com/docs/ping-recipes";

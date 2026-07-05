@@ -82,6 +82,6 @@ public sealed class AddTagCommand : AsyncCommand<AddTagSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new TextPrompt<string>(prompt));
+        return AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker(prompt)));
     }
 }

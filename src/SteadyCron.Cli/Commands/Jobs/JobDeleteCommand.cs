@@ -36,7 +36,7 @@ public sealed class JobDeleteCommand : SteadyCronCommandBase<JobDeleteSettings>
                     ExitCodes.Error);
             }
 
-            if (!output.Out.Confirm($"Delete job '{Markup.Escape(job.Name)}' ({job.Kind})?", defaultValue: false))
+            if (!output.Out.Confirm(PromptFormatting.Marker($"Delete job '{Markup.Escape(job.Name)}' ({job.Kind})?"), defaultValue: false))
             {
                 output.Info("Aborted.");
                 return ExitCodes.Ok;

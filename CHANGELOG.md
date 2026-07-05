@@ -6,6 +6,21 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-05
+
+### Fixed
+
+- **Status glyphs (`✓`/`✗`/`●`/`→` and friends) rendered as `?` on legacy Windows consoles**
+  (`cmd.exe` with the default raster font) across every command, most visibly `logstream`'s success
+  dot. All such glyphs now resolve through `Output/Glyphs.cs` against the console's detected Unicode
+  support, falling back to ASCII (`v`/`x`/`*`/`->`/…) automatically.
+- **Low-contrast grey text on content the user needs to read**: job names, failure details, plan
+  diffs, and field labels across `logstream`, `report`, `logbook`, `sync`/`plan`/`apply`, and several
+  other commands were dimmed to grey with no real reason. Output color now follows a single style
+  guide (`Output/Styles.cs`, documented in `docs/output-style-guide.md`) — grey is reserved for
+  optional hints, footnotes, and table borders; everything else the user needs to read is rendered
+  at full contrast. Interactive prompts also gained a consistent yellow `?` marker.
+
 ## [1.15.0] - 2026-07-04
 
 ### Fixed

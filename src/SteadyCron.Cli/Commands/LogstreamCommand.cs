@@ -122,9 +122,10 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
             hints.Add($"polling every {settings.Interval} s");
             hints.Add("Ctrl+C to stop");
 
+            var bullet = output.Glyphs.Bullet;
             output.Out.MarkupLine(
-                $"[bold]Logstream[/]  [grey]{string.Join("  ·  ", hints.Select(OutputContext.Escape))}[/]");
-            output.Out.Write(new Rule().RuleStyle(Style.Parse("grey")));
+                $"[bold]Logstream[/]  [{Styles.Hint}]{string.Join($"  {bullet}  ", hints.Select(OutputContext.Escape))}[/]");
+            output.Out.Write(new Rule().RuleStyle(Style.Parse(Styles.Border)));
         }
 
         // ── Initial tail ────────────────────────────────────────────────────────────
@@ -144,8 +145,8 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
             {
                 if (!output.Json)
                 {
-                    output.Out.Write(new Rule($"[grey]last {settings.Since} s[/]")
-                        .LeftJustified().RuleStyle(Style.Parse("grey")));
+                    output.Out.Write(new Rule($"last {settings.Since} s")
+                        .LeftJustified().RuleStyle(Style.Parse(Styles.Border)));
                 }
 
                 foreach (var e in tailItems)
@@ -157,7 +158,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
 
         if (!output.Json)
         {
-            output.Out.Write(new Rule("[grey]live[/]").LeftJustified().RuleStyle(Style.Parse("grey")));
+            output.Out.Write(new Rule("live").LeftJustified().RuleStyle(Style.Parse(Styles.Border)));
         }
 
         // ── Polling loop ────────────────────────────────────────────────────────────
@@ -223,8 +224,8 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
                     && DateTimeOffset.UtcNow - lastOutputAt >= TimeSpan.FromSeconds(IdleThresholdSeconds))
                 {
                     var idleTs = DateTimeOffset.Now.ToString("HH:mm:ss");
-                    output.Out.Write(new Rule($"[grey]{idleTs}[/]")
-                        .LeftJustified().RuleStyle(Style.Parse("grey")));
+                    output.Out.Write(new Rule(idleTs)
+                        .LeftJustified().RuleStyle(Style.Parse(Styles.Border)));
                     lastOutputAt = DateTimeOffset.UtcNow;
                 }
             }
@@ -260,7 +261,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
 
         var ts = e.OccurredAt.ToLocalTime().ToString("HH:mm:ss");
         var labelPlain = LogbookFormatting.EventLabel(e.EventType).PadRight(EventLabelWidth);
-        var detail = BuildDetail(e);
+        var detail = BuildDetail(e, output.Glyphs);
 
         var lineColor = LineColor(e);
 
@@ -270,14 +271,15 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
             var jobPart = e.JobName is not null ? $"  {OutputContext.Escape(e.JobName)}" : "";
             var detailPart = detail.Length > 0 ? $"    {OutputContext.Escape(Clip(detail, 70))}" : "";
             output.Out.MarkupLine(
-                $"[{lineColor}]{ts}  ●  {OutputContext.Escape(labelPlain)}{jobPart}{detailPart}[/]");
+                $"[{lineColor}]{ts}  {output.Glyphs.Dot}  {OutputContext.Escape(labelPlain)}{jobPart}{detailPart}[/]");
         }
         else
         {
-            // Normal line — dot reflects event type, job and detail are greyed.
-            var dot = SuccessEvent(e.EventType) ? "[green]●[/]" : "[grey]●[/]";
-            var jobPart = e.JobName is not null ? $"  [grey]{OutputContext.Escape(e.JobName)}[/]" : "";
-            var detailPart = detail.Length > 0 ? $"    [grey]{OutputContext.Escape(Clip(detail, 70))}[/]" : "";
+            // Normal line — dot reflects event type; job and detail are the actual content the
+            // user is watching for, so (unlike the dot) they render at full contrast, never dimmed.
+            var dot = SuccessEvent(e.EventType) ? $"[{Styles.Success}]{output.Glyphs.Dot}[/]" : $"[{Styles.Hint}]{output.Glyphs.Dot}[/]";
+            var jobPart = e.JobName is not null ? $"  {OutputContext.Escape(e.JobName)}" : "";
+            var detailPart = detail.Length > 0 ? $"    {OutputContext.Escape(Clip(detail, 70))}" : "";
             output.Out.MarkupLine($"{ts}  {dot}  {OutputContext.Escape(labelPlain)}{jobPart}{detailPart}");
         }
     }
@@ -311,13 +313,13 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
     // Builds the detail text shown after the job name. For execution failures and heartbeat
     // events the API-provided detail field just mirrors the event label ("Execution failed"),
     // so we extract the actually useful signal from metadata instead.
-    private static string BuildDetail(LogbookEntry e)
+    private static string BuildDetail(LogbookEntry e, Glyphs glyphs)
     {
         switch (e.EventType)
         {
             case "execution_failure":
             case "ping_fail":
-                return BuildFailureDetail(e);
+                return BuildFailureDetail(e, glyphs);
             case "heartbeat_missed":
             case "run_abandoned":
                 return BuildHeartbeatDetail(e);
@@ -326,7 +328,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
         }
     }
 
-    private static string BuildFailureDetail(LogbookEntry e)
+    private static string BuildFailureDetail(LogbookEntry e, Glyphs glyphs)
     {
         var parts = new List<string>();
 
@@ -358,7 +360,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
                 var isFinal = IsFinalAttempt(e);
                 if (attemptStr.Length > 0)
                 {
-                    parts.Add(isFinal ? $"attempt {attemptStr} · final" : $"attempt {attemptStr} · retrying");
+                    parts.Add(isFinal ? $"attempt {attemptStr} {glyphs.Bullet} final" : $"attempt {attemptStr} {glyphs.Bullet} retrying");
                 }
             }
 
@@ -376,7 +378,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
 
         // Don't fall back to e.Detail — for execution_failure it contains "Execution failed",
         // which is identical to the event label and adds no information.
-        return string.Join(" · ", parts);
+        return string.Join($" {glyphs.Bullet} ", parts);
     }
 
     private static string BuildHeartbeatDetail(LogbookEntry e)

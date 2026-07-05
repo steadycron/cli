@@ -51,7 +51,7 @@ public sealed class CronPreviewCommand : SteadyCronCommandBase<CronPreviewSettin
             return ExitCodes.Ok;
         }
 
-        output.Markup($"Next [bold]{response.NextFires.Count}[/] fires of [yellow]{OutputContext.Escape(settings.Expression)}[/] [grey]({OutputContext.Escape(tz)})[/]:");
+        output.Markup($"Next [bold]{response.NextFires.Count}[/] fires of [yellow]{OutputContext.Escape(settings.Expression)}[/] ({OutputContext.Escape(tz)}):");
 
         var table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("#");

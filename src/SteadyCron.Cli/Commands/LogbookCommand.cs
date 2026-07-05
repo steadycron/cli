@@ -167,12 +167,13 @@ public sealed class LogbookCommand : SteadyCronCommandBase<LogbookSettings>
         var f = from.ToLocalTime();
         var t = to.ToLocalTime();
         var offset = f.ToString("zzz");
+        var arrow = output.Glyphs.Arrow;
         var windowLabel = f.Date == t.Date
-            ? $"{f:yyyy-MM-dd HH:mm} → {t:HH:mm} ({offset})"
-            : $"{f:yyyy-MM-dd HH:mm} → {t:yyyy-MM-dd HH:mm} ({offset})";
+            ? $"{f:yyyy-MM-dd HH:mm} {arrow} {t:HH:mm} ({offset})"
+            : $"{f:yyyy-MM-dd HH:mm} {arrow} {t:yyyy-MM-dd HH:mm} ({offset})";
 
         output.Line($"Logbook  {windowLabel}");
-        output.Line(new string('─', 60));
+        output.Line(new string(output.Glyphs.Rule, 60));
         output.Line();
 
         if (items.Count == 0)
@@ -215,11 +216,11 @@ public sealed class LogbookCommand : SteadyCronCommandBase<LogbookSettings>
         foreach (var item in items)
         {
             tbl.AddRow(
-                LogbookFormatting.SeverityDot(item.Severity),
+                LogbookFormatting.SeverityDot(item.Severity, output.Glyphs),
                 Markup.Escape(item.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")),
                 Markup.Escape(LogbookFormatting.EventLabel(item.EventType)),
-                item.JobName is not null ? Markup.Escape(item.JobName) : "[grey]—[/]",
-                item.Detail is not null ? Markup.Escape(item.Detail) : "[grey]—[/]");
+                item.JobName is not null ? Markup.Escape(item.JobName) : output.Glyphs.NoValue,
+                item.Detail is not null ? Markup.Escape(item.Detail) : output.Glyphs.NoValue);
         }
 
         output.Render(tbl);
@@ -232,16 +233,16 @@ public sealed class LogbookCommand : SteadyCronCommandBase<LogbookSettings>
         {
             // Timestamp + severity on one line
             var ts = item.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
-            output.Markup($"  {LogbookFormatting.SeverityLabel(item.Severity)}  [grey]{Markup.Escape(ts)}[/]");
+            output.Markup($"  {LogbookFormatting.SeverityLabel(item.Severity, output.Glyphs)}  {Markup.Escape(ts)}");
 
             // Event label + job
-            var jobPart = item.JobName is not null ? $"  [grey]·[/]  {Markup.Escape(item.JobName)}" : "";
+            var jobPart = item.JobName is not null ? $"  {output.Glyphs.Bullet}  {Markup.Escape(item.JobName)}" : "";
             output.Markup($"  [bold]{Markup.Escape(LogbookFormatting.EventLabel(item.EventType))}[/]{jobPart}");
 
             // Detail
             if (item.Detail is not null)
             {
-                output.Markup($"  [grey]Detail:[/]  {Markup.Escape(item.Detail)}");
+                output.Markup($"  Detail:  {Markup.Escape(item.Detail)}");
             }
 
             // Metadata key-value pairs
@@ -250,7 +251,7 @@ public sealed class LogbookCommand : SteadyCronCommandBase<LogbookSettings>
                 foreach (var (key, value) in item.Metadata)
                 {
                     var label = LogbookFormatting.MetadataLabel(key).PadRight(20);
-                    output.Markup($"  [grey]{Markup.Escape(label)}[/]  {Markup.Escape(LogbookFormatting.FormatMetadataValue(value))}");
+                    output.Markup($"  {Markup.Escape(label)}  {Markup.Escape(LogbookFormatting.FormatMetadataValue(value))}");
                 }
             }
 

@@ -30,13 +30,13 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
         grid.AddColumn();
 
         void Row(string key, string? value) =>
-            grid.AddRow($"[grey]{key}[/]", Markup.Escape(value ?? "—"));
+            grid.AddRow(key, Markup.Escape(value ?? output.Glyphs.NoValue));
 
         Row("id", job.Id.ToString());
         Row("job_key", job.JobKey);
         Row("name", job.Name);
         Row("kind", job.Kind);
-        grid.AddRow("[grey]status[/]", JobFormatting.StatusMarkup(job));
+        grid.AddRow("status", JobFormatting.StatusMarkup(job));
         if (job.PausedReason is not null)
         {
             Row("paused_reason", job.PausedReason);
@@ -88,9 +88,9 @@ public sealed class JobGetCommand : SteadyCronCommandBase<JobTargetSettings>
         return ExitCodes.Ok;
     }
 
-    private static string DescribeHeaders(Dictionary<string, string>? headers) =>
+    private static string? DescribeHeaders(Dictionary<string, string>? headers) =>
         headers is null || headers.Count == 0
-            ? "—"
+            ? null
             : string.Join("\n", headers.Select(h => $"{h.Key}: {h.Value}"));
 
     private static string? Truncate(string? value, int max)

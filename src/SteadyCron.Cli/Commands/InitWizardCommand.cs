@@ -52,7 +52,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
         var choice = output.Out.Prompt(
             new SelectionPrompt<string>()
-                .Title("What do you want to do?")
+                .Title(PromptFormatting.Marker("What do you want to do?"))
                 .AddChoices(HeartbeatChoice, HttpChoice, SkipChoice));
 
         if (choice == SkipChoice)
@@ -140,7 +140,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         // Pre-SPEC-20a account with no default channel yet — set one up transparently rather
         // than failing the wizard. The API has no way to look up "my account's email" from an
         // API-key-authenticated request, so ask for it directly.
-        var email = output.Out.Prompt(new TextPrompt<string>("No alert channel found — email for alerts:"));
+        var email = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("No alert channel found — email for alerts:")));
         return await client.CreateChannelAsync(
             new CreateAlertChannelRequest("Email (default)", "email", new Dictionary<string, string> { ["to"] = email }),
             ct);
@@ -148,7 +148,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
     private async Task<JobResponse> RunHeartbeatWizardAsync(SteadyCronClient client, Guid channelId, OutputContext output, CancellationToken ct)
     {
-        var name = output.Out.Prompt(new TextPrompt<string>("Job name:"));
+        var name = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Job name:")));
 
         var schedule = await PromptCronWithDefaultAsync(
             client, output, $"Expected schedule (cron) [[{DefaultHeartbeatSchedule}]]:", DefaultHeartbeatSchedule, ct);
@@ -159,7 +159,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         PrintNextFires(output, preview, timezone);
 
         var graceDefault = CronScheduleHelper.ComputeGraceDefault(preview.NextFires);
-        var graceText = output.Out.Prompt(new TextPrompt<string>($"Grace period seconds [[{graceDefault}]]:").AllowEmpty());
+        var graceText = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker($"Grace period seconds [{Styles.Hint}][[{graceDefault}]][/]:")).AllowEmpty());
         var grace = string.IsNullOrWhiteSpace(graceText) ? graceDefault : int.Parse(graceText);
 
         var manifestJob = new ManifestJob
@@ -186,9 +186,9 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
     private async Task<JobResponse> RunHttpWizardAsync(SteadyCronClient client, Guid channelId, OutputContext output, CancellationToken ct)
     {
-        var name = output.Out.Prompt(new TextPrompt<string>("Job name:"));
-        var url = output.Out.Prompt(new TextPrompt<string>("URL to call:"));
-        var method = output.Out.Prompt(new TextPrompt<string>("Method [[GET]]:").AllowEmpty());
+        var name = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Job name:")));
+        var url = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("URL to call:")));
+        var method = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker($"Method [{Styles.Hint}][[GET]][/]:")).AllowEmpty());
         var timezone = await PromptTimezoneAsync(client, output, ct);
         var schedule = await PromptCronRequiredAsync(
             client, output, "Schedule (cron, e.g. \"*/15 * * * *\"):", timezone, ct);
@@ -213,7 +213,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
             Trigger = AlertTrigger.OnFailure,
         }, ct);
 
-        if (output.Out.Confirm("Run it now?", defaultValue: false))
+        if (output.Out.Confirm(PromptFormatting.Marker("Run it now?"), defaultValue: false))
         {
             await client.RunNowAsync(job.Id, ct);
             output.Success($"Triggered '{job.Name}'. It will fire within a few seconds.");
@@ -232,7 +232,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
     {
         while (true)
         {
-            var raw = output.Out.Prompt(new TextPrompt<string>(prompt).AllowEmpty());
+            var raw = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker(prompt)).AllowEmpty());
             var expression = string.IsNullOrWhiteSpace(raw) ? defaultExpression : raw.Trim();
 
             try
@@ -255,7 +255,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
     {
         while (true)
         {
-            var expression = output.Out.Prompt(new TextPrompt<string>(prompt));
+            var expression = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker(prompt)));
 
             try
             {
@@ -290,7 +290,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         const string otherChoice = "Other…";
         choices.Add(otherChoice);
 
-        var choice = output.Out.Prompt(new SelectionPrompt<string>().Title("Timezone:").AddChoices(choices));
+        var choice = output.Out.Prompt(new SelectionPrompt<string>().Title(PromptFormatting.Marker("Timezone:")).AddChoices(choices));
 
         if (choice == otherChoice)
         {
@@ -307,7 +307,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
     {
         while (true)
         {
-            var tz = output.Out.Prompt(new TextPrompt<string>("IANA timezone:"));
+            var tz = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("IANA timezone:")));
 
             try
             {
@@ -483,7 +483,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
             return;
         }
 
-        if (!output.Out.Confirm("Set up CI? Plan on PRs, apply on merge", defaultValue: false))
+        if (!output.Out.Confirm(PromptFormatting.Marker("Set up CI? Plan on PRs, apply on merge"), defaultValue: false))
         {
             return;
         }

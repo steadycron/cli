@@ -43,13 +43,13 @@ public sealed class ConfigShowCommand : SteadyCronCommandBase<ConfigShowSettings
             var grid = new Grid();
             grid.AddColumn(new GridColumn().PadRight(2));
             grid.AddColumn();
-            grid.AddRow("[grey]api_url[/]", $"{Markup.Escape(config.ApiUrl)} [grey]({config.ApiUrlSource.ToString().ToLowerInvariant()})[/]");
+            grid.AddRow("api_url", $"{Markup.Escape(config.ApiUrl)} ({config.ApiUrlSource.ToString().ToLowerInvariant()})");
             grid.AddRow(
-                "[grey]api_key[/]",
+                "api_key",
                 config.HasApiKey
-                    ? $"{Markup.Escape(config.MaskedApiKey!)} [grey]({config.ApiKeySource.ToString().ToLowerInvariant()})[/]"
+                    ? $"{Markup.Escape(config.MaskedApiKey!)} ({config.ApiKeySource.ToString().ToLowerInvariant()})"
                     : "[red]not set[/]");
-            grid.AddRow("[grey]config file[/]", Markup.Escape(config.ConfigFilePath ?? "—"));
+            grid.AddRow("config file", Markup.Escape(config.ConfigFilePath ?? output.Glyphs.NoValue));
             output.Render(new Panel(grid).Header("[bold]SteadyCron configuration[/]").Border(BoxBorder.Rounded));
         }
 

@@ -26,6 +26,9 @@ Style is enforced by [`.editorconfig`](.editorconfig) and checked in the build
 
 - **Braces are required on every `if`/`else`** (this is an error, not a suggestion).
 - `Nullable` and `ImplicitUsings` are enabled solution-wide.
+- **Console output** goes through `OutputContext`/`Styles`/`Glyphs` — see
+  [`docs/output-style-guide.md`](docs/output-style-guide.md) before adding a new color or status
+  glyph to a command.
 
 Run `dotnet format` before opening a PR if your editor doesn't apply the EditorConfig rules
 automatically.

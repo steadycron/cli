@@ -33,7 +33,7 @@ internal static class SignupHelpers
     {
         while (true)
         {
-            var code = output.Out.Prompt(new TextPrompt<string>("Enter 6-digit code:"));
+            var code = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Enter 6-digit code:")));
 
             try
             {
@@ -49,7 +49,7 @@ internal static class SignupHelpers
 
                 var choice = output.Out.Prompt(
                     new SelectionPrompt<string>()
-                        .Title("What next?")
+                        .Title(PromptFormatting.Marker("What next?"))
                         .AddChoices("Resend code", "Quit"));
 
                 if (choice == "Quit")

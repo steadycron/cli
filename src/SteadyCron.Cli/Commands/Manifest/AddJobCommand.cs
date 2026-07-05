@@ -168,7 +168,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new SelectionPrompt<string>().Title("Kind:").AddChoices("heartbeat", "http"));
+        return AnsiConsole.Prompt(new SelectionPrompt<string>().Title(PromptFormatting.Marker("Kind:")).AddChoices("heartbeat", "http"));
     }
 
     private static string? ResolveName(AddJobSettings settings, bool interactive, OutputContext output)
@@ -184,7 +184,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new TextPrompt<string>("Job name:"));
+        return AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Job name:")));
     }
 
     private const string DefaultSchedule = "*/15 * * * *";
@@ -213,7 +213,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
 
         while (true)
         {
-            var raw = AnsiConsole.Prompt(new TextPrompt<string>($"Schedule (cron) [[{DefaultSchedule}]]:").AllowEmpty());
+            var raw = AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker($"Schedule (cron) [{Styles.Hint}][[{DefaultSchedule}]][/]:")).AllowEmpty());
             var expression = string.IsNullOrWhiteSpace(raw) ? DefaultSchedule : raw.Trim();
 
             try
@@ -258,7 +258,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
         const string otherChoice = "Other…";
         choices.Add(otherChoice);
 
-        var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("Timezone:").AddChoices(choices));
+        var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title(PromptFormatting.Marker("Timezone:")).AddChoices(choices));
         if (choice != otherChoice)
         {
             return choice == localLabel ? localIana! : "UTC";
@@ -266,7 +266,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
 
         while (true)
         {
-            var tz = AnsiConsole.Prompt(new TextPrompt<string>("IANA timezone:"));
+            var tz = AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("IANA timezone:")));
             if (TimezoneHelper.IsValid(tz))
             {
                 return tz;
@@ -291,7 +291,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return graceDefault;
         }
 
-        var raw = AnsiConsole.Prompt(new TextPrompt<string>($"Grace period seconds [[{graceDefault}]]:").AllowEmpty());
+        var raw = AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker($"Grace period seconds [{Styles.Hint}][[{graceDefault}]][/]:")).AllowEmpty());
         return string.IsNullOrWhiteSpace(raw) ? graceDefault : int.Parse(raw);
     }
 
@@ -331,7 +331,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new TextPrompt<string>("URL to call:"));
+        return AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker("URL to call:")));
     }
 
     private static string? ResolveMethod(AddJobSettings settings, bool interactive, OutputContext output)
@@ -353,7 +353,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return "GET";
         }
 
-        var raw = AnsiConsole.Prompt(new TextPrompt<string>("Method [[GET]]:").AllowEmpty());
+        var raw = AnsiConsole.Prompt(new TextPrompt<string>(PromptFormatting.Marker($"Method [{Styles.Hint}][[GET]][/]:")).AllowEmpty());
         return string.IsNullOrWhiteSpace(raw) ? "GET" : raw.Trim().ToUpperInvariant();
     }
 }
