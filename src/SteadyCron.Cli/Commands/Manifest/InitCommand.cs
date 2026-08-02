@@ -158,7 +158,7 @@ public sealed class InitCommand : Command<InitSettings>
           # A job succeeds when it returns a 2xx status within the timeout.
           - id: daily-report            # stable reconciliation key — never change this
             name: Daily report          # human-readable display name (may be renamed freely)
-            kind: http                  # http (default) | heartbeat
+            kind: http                  # http (default) | heartbeat | agent
 
             description: Generates the overnight analytics report and emails a summary.
 
@@ -214,6 +214,11 @@ public sealed class InitCommand : Command<InitSettings>
             #   on_recovery         — fires once when the job recovers after a failure/miss
             #   on_slow_run         — fires when a run's duration exceeds its rolling baseline
             #   on_size_anomaly     — fires when a run's response size deviates from its rolling baseline
+            # Agent monitors only (see the agent job further down):
+            #   on_empty_result     — fires when a run reports producing nothing
+            #   on_cost_exceeded    — fires when a per-run or per-period spend ceiling is passed
+            #   on_no_progress      — fires when a run's step or tool-call ceiling is passed
+            #   on_unverified_run   — fires when a success ping arrives with no run report
             rules:
               - channel: ops-slack          # channel name defined in the channels section above
                 trigger: on_failure
@@ -272,12 +277,12 @@ public sealed class InitCommand : Command<InitSettings>
             grace: 600                  # 10-minute grace period
 
             # stuck_run_detection: alert when a run starts (via the /start ping) but never
-            # completes (no /finish or /fail ping within max_run_duration seconds).
+            # completes (no /success or /fail ping within max_run_duration_seconds).
             stuck_run_detection: true
 
-            # max_run_duration: maximum expected runtime in seconds.
+            # max_run_duration_seconds: maximum expected runtime in seconds.
             # Only meaningful when stuck_run_detection is true.
-            max_run_duration: 3600      # 1 hour
+            max_run_duration_seconds: 3600   # 1 hour
 
             tags:
               - env:production
@@ -291,6 +296,77 @@ public sealed class InitCommand : Command<InitSettings>
               - channel: ops-email
                 trigger: on_recovery
                 severity: p3
+
+          # ── AI agent monitor ───────────────────────────────────────────────────────
+          # Like a heartbeat, but the ping carries a JSON run report and SteadyCron judges
+          # the run against the outcome rules below — so "exit 0" is no longer taken as
+          # proof that any work happened.
+          #
+          # A run is an ordered PAIR of calls: /start when it begins, then /success (or
+          # /fail) with the report. Get the snippet after applying:
+          #   steadycron jobs snippet nightly-triage
+          - id: nightly-triage
+            name: Nightly ticket triage
+            kind: agent
+
+            description: Claude agent that triages the overnight support queue.
+
+            schedule: "0 3 * * *"       # expect a run every night at 03:00
+            timezone: Europe/Berlin
+            paused: false
+
+            # An agent monitor runs on TWO clocks, so set both:
+            #   grace                    — no /start by 03:10 → the schedule window is missed
+            #   max_run_duration_seconds — a /start with no completion by then → abandoned
+            grace: 600
+            max_run_duration_seconds: 1800
+
+            # items_label: what this agent produces. Names itemsProduced in alerts and in
+            # the dashboard. Deciding it is the point — it is what proves a run did its job.
+            items_label: tickets
+
+            # report_required: a success ping carrying no parseable report is recorded as
+            # "unverified" rather than success (and can fire on_unverified_run).
+            report_required: true
+
+            # rule_empty_result_enabled: a run reporting zero items produced is a FAILURE.
+            # This is the headline rule — the failure mode a plain cron monitor cannot see.
+            rule_empty_result_enabled: true
+
+            # Spend ceilings, in USD (the unit agents report and providers quote).
+            # Exceeding one alerts but does not fail the run. 0 or omitted = no ceiling.
+            rule_max_cost_usd_per_run: 0.50
+            rule_max_cost_usd_per_period: 20
+            rule_cost_period: month     # day | month — bucketed in the job's own timezone
+
+            # Loop detection: alert when a single run burns more steps or tool calls
+            # than it ever should need.
+            rule_max_steps: 40
+            rule_max_tool_calls: 100
+
+            # Optional lower warning threshold under max_run_duration_seconds, in ms.
+            rule_max_duration_ms: 900000
+
+            tags:
+              - env:production
+
+            rules:
+              # Agent-only triggers:
+              #   on_empty_result   — the run produced nothing
+              #   on_cost_exceeded  — a per-run or per-period spend ceiling was passed
+              #   on_no_progress    — the step or tool-call ceiling was passed (a loop)
+              #   on_unverified_run — a success ping arrived with no report
+              - channel: ops-email
+                trigger: on_empty_result
+                severity: p1
+
+              - channel: ops-email
+                trigger: on_cost_exceeded
+                severity: p2
+
+              - channel: ops-email
+                trigger: on_missed_heartbeat   # no run reported in the window
+                severity: p1
 
         # ── Delivery Shaping ──────────────────────────────────────────────────────────
         # Account-level, single-instance notification shaping — not per-job. Omit a block to
@@ -484,6 +560,45 @@ public sealed class InitCommand : Command<InitSettings>
           ]
         }
 
+        # ── AI agent monitor ──────────────────────────────────────────────────────────
+        # Like a heartbeat, but each run reports a JSON payload that SteadyCron judges
+        # against the outcome rules below — so "exit 0" is no longer proof of work.
+        # A run is an ordered PAIR of calls: /start, then /success (or /fail) with the report.
+        resource "steadycron_agent_monitor" "nightly_triage" {
+          name = "Nightly ticket triage"
+          key  = "nightly-triage"
+
+          cron_expression = "0 3 * * *"      # expect a run every night at 03:00
+          timezone        = "Europe/Berlin"
+
+          # Two clocks, so set both:
+          #   grace_seconds            — no /start by then → the schedule window is missed
+          #   max_run_duration_seconds — a /start with no completion by then → abandoned
+          grace_seconds            = 600
+          max_run_duration_seconds = 1800
+
+          # What this agent produces. Names itemsProduced in alerts; a run producing 0 fails.
+          items_label = "tickets"
+
+          # Both default to true. Changing either forces a new monitor — the API accepts them
+          # on create only.
+          # report_required           = true
+          # rule_empty_result_enabled = true
+
+          # Spend ceilings in USD. Exceeding one alerts but does not fail the run.
+          rule_max_cost_usd_per_run    = 0.50
+          rule_max_cost_usd_per_period = 20
+          rule_cost_period             = "month"   # "day" | "month"
+
+          # Loop detection.
+          rule_max_steps      = 40
+          rule_max_tool_calls = 100
+
+          tags = [
+            steadycron_tag.env_production.id,
+          ]
+        }
+
         # ── Alert rules ───────────────────────────────────────────────────────────────
         # Rules define WHEN to notify and on WHICH channel.
         # Available triggers:
@@ -491,6 +606,11 @@ public sealed class InitCommand : Command<InitSettings>
         #   on_n_consecutive    — fires after N consecutive failures (requires threshold)
         #   on_missed_heartbeat — fires when a heartbeat check-in is overdue
         #   on_recovery         — fires once when the job recovers
+        # Agent monitors only:
+        #   on_empty_result     — fires when a run reports producing nothing
+        #   on_cost_exceeded    — fires when a per-run or per-period spend ceiling is passed
+        #   on_no_progress      — fires when a run's step or tool-call ceiling is passed
+        #   on_unverified_run   — fires when a success ping arrives with no run report
 
         resource "steadycron_alert_rule" "daily_report_on_failure" {
           job_id               = steadycron_http_job.daily_report.id
@@ -524,6 +644,19 @@ public sealed class InitCommand : Command<InitSettings>
           job_id     = steadycron_heartbeat_monitor.nightly_backup.id
           channel_id = steadycron_alert_channel.ops_email.id
           trigger    = "on_recovery"
+        }
+
+        # The rule that makes an agent monitor worth having: the run reported nothing produced.
+        resource "steadycron_alert_rule" "nightly_triage_on_empty_result" {
+          job_id     = steadycron_agent_monitor.nightly_triage.id
+          channel_id = steadycron_alert_channel.ops_email.id
+          trigger    = "on_empty_result"
+        }
+
+        resource "steadycron_alert_rule" "nightly_triage_on_cost_exceeded" {
+          job_id     = steadycron_agent_monitor.nightly_triage.id
+          channel_id = steadycron_alert_channel.ops_email.id
+          trigger    = "on_cost_exceeded"
         }
 
         """;

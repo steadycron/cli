@@ -223,6 +223,7 @@ names in scripts.
 ```bash
 steadycron jobs list                          # table of all jobs with their job keys
 steadycron jobs list --kind heartbeat --status missed
+steadycron jobs list --kind agent
 steadycron jobs get my-job-key                # by job key (preferred), name, or id
 steadycron jobs logs my-job-key -n 20
 steadycron jobs pause my-job-key
@@ -260,8 +261,8 @@ Add `--json` to any command for machine-readable output.
 ## Cron as code
 
 One-off commands are fine for getting started; the manifest is how you run SteadyCron for real.
-Declare your entire account — jobs, heartbeat monitors, alert channels, tags, variables — in a
-YAML file, commit it, and reconcile with a single command:
+Declare your entire account — jobs, heartbeat and agent monitors, alert channels, tags,
+variables — in a YAML file, commit it, and reconcile with a single command:
 
 ```bash
 steadycron sync steadycron.yaml --namespace prod
@@ -323,6 +324,23 @@ jobs:
     kind: heartbeat
     schedule: "0 2 * * *"
     grace: 1800
+
+  - id: nightly-triage
+    name: Nightly ticket triage
+    kind: agent                # AI agent monitor — judges what each run produced
+    schedule: "0 3 * * *"
+    timezone: Europe/Berlin
+    grace: 600                 # no /start ping by then → the schedule window is missed
+    max_run_duration_seconds: 1800   # a /start with no completion by then → abandoned
+    items_label: tickets       # a run producing 0 tickets is a failure
+    rule_max_cost_usd_per_run: 0.50
+    rule_max_cost_usd_per_period: 20
+    rule_cost_period: month
+    rule_max_steps: 40         # loop detection
+    rules:
+      - channel: slack-oncall
+        trigger: on_empty_result
+        severity: p1
 ```
 
 See [`examples/steadycron.yaml`](examples/steadycron.yaml) for the complete field reference, or
@@ -509,8 +527,8 @@ explaining what it does and listing valid values. Delete the sections you don't 
 
 The Terraform boilerplate uses the exact resource and attribute names from the live
 `steadycron/steadycron` provider — `steadycron_http_job`, `steadycron_heartbeat_monitor`,
-`steadycron_alert_channel`, `steadycron_alert_rule`, `steadycron_tag`, and
-`steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
+`steadycron_agent_monitor`, `steadycron_alert_channel`, `steadycron_alert_rule`, `steadycron_tag`,
+and `steadycron_template_variable` — so it applies out of the box with `terraform init && terraform apply`.
 
 `manifest scaffold` requires no API key and no configuration — run it any time.
 
@@ -525,6 +543,7 @@ additively, and only after validating the result.
 ```bash
 # Fully via flags — no prompts, safe for scripts
 steadycron manifest add job --kind heartbeat --name nightly-backup --schedule "0 2 * * *"
+steadycron manifest add job --kind agent --name nightly-triage --items-label tickets
 steadycron manifest add channel --kind slack --name ops-slack
 steadycron manifest add tag env staging --color yellow
 steadycron manifest add variable api_token
@@ -539,6 +558,7 @@ $ steadycron manifest add job
 ? Kind:
   › heartbeat
     http
+    agent
 Job name: nightly-backup
 Schedule (cron) [*/15 * * * *]: ⏎
 ? Timezone:
@@ -768,6 +788,7 @@ Mirrors the web Logbook page. Available `--domain` values:
 |---|---|
 | `executions` | HTTP execution succeeded / failed |
 | `heartbeats` | Heartbeat missed / recovered, ping received, run started / abandoned |
+| `agents` | Agent run started / completed / failed / unverified / missed / recovered / abandoned |
 | `alerts` | Alert delivered / failed / suppressed / pending |
 | `jobs` | Job created / deleted / paused / resumed |
 | `keys` | API key created / revoked |

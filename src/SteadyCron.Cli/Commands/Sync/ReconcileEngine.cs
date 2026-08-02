@@ -135,7 +135,7 @@ public sealed class ReconcileEngine
             }, ct);
 
         var exitCode = RenderApplyResult(output, applyResponse);
-        await RenderCreatedHeartbeatPingUrlsAsync(output, applyResponse, client, ct);
+        await RenderCreatedPingUrlsAsync(output, applyResponse, client, ct);
         return exitCode;
     }
 
@@ -212,11 +212,12 @@ public sealed class ReconcileEngine
         !Console.IsInputRedirected && !Console.IsOutputRedirected;
 
     /// <summary>
-    /// After a successful apply, fetches all heartbeat jobs whose keys appear in the
-    /// create-action list and prints their ping URLs. This saves users a follow-up
-    /// `jobs ping-urls` call when setting up new monitors.
+    /// After a successful apply, fetches every newly-created ping-driven job (heartbeat or agent
+    /// monitor) and prints its ping URLs. This saves users a follow-up `jobs ping-urls` call when
+    /// setting up new monitors — and for an agent monitor the URLs are the whole setup step, since
+    /// nothing reports until the pair of calls is wired in.
     /// </summary>
-    private static async Task RenderCreatedHeartbeatPingUrlsAsync(
+    private static async Task RenderCreatedPingUrlsAsync(
         OutputContext output,
         ReconcileResponse result,
         SteadyCronClient client,
@@ -229,25 +230,36 @@ public sealed class ReconcileEngine
 
         if (createdJobKeys.Count == 0) { return; }
 
-        var heartbeatJobs = await client.ListAllJobsAsync(kind: "heartbeat", ct: ct);
-        var newMonitors = heartbeatJobs
+        // The API's kind filter takes one value, so ask for each ping-driven kind rather than
+        // listing everything and negating "http".
+        var pingDriven = (await client.ListAllJobsAsync(kind: JobKinds.Heartbeat, ct: ct))
+            .Concat(await client.ListAllJobsAsync(kind: JobKinds.Agent, ct: ct));
+
+        var newMonitors = pingDriven
             .Where(j => j.JobKey is not null
                         && createdJobKeys.Contains(j.JobKey)
                         && j.PingUrls is not null)
+            .OrderBy(j => j.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (newMonitors.Count == 0) { return; }
 
         output.Line();
         output.Markup(newMonitors.Count == 1
-            ? "Heartbeat ping URLs for the new monitor:"
-            : $"Heartbeat ping URLs for {newMonitors.Count} new monitors:");
+            ? "Ping URLs for the new monitor:"
+            : $"Ping URLs for {newMonitors.Count} new monitors:");
         output.Line();
 
         foreach (var job in newMonitors)
         {
             JobFormatting.RenderPingUrls(output, job.Name, job.PingUrls!);
             output.Line();
+        }
+
+        if (newMonitors.Any(j => j.IsAgent))
+        {
+            output.Info("Agent monitors expect an ordered pair: /start when a run begins, then /success "
+                        + "with a JSON run report. Run 'steadycron jobs snippet <job>' for a ready-to-paste example.");
         }
     }
 }

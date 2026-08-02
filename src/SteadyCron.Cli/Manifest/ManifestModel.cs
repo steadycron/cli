@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SteadyCron.Cli.Manifest;
 
 /// <summary>
@@ -31,7 +33,7 @@ public sealed class ManifestJob
 
     public string? Name { get; set; }
 
-    /// <summary><c>http</c> (default) or <c>heartbeat</c>.</summary>
+    /// <summary><c>http</c> (default), <c>heartbeat</c>, or <c>agent</c>.</summary>
     public string? Kind { get; set; }
 
     public string? Description { get; set; }
@@ -69,10 +71,57 @@ public sealed class ManifestJob
     /// <summary><c>do_nothing</c> (default) or <c>fire_once_now</c>.</summary>
     public string? MisfirePolicy { get; set; }
 
-    // ── Heartbeat jobs ───────────────────────────────────────────────────────────
+    // ── Heartbeat and agent jobs (both ping-driven) ──────────────────────────────
     public int? Grace { get; set; }
+
+    /// <summary>Heartbeat only — agent monitors force it on, and declaring it false is rejected.</summary>
     public bool? StuckRunDetection { get; set; }
+
+    /// <summary>
+    /// Maximum in-flight run duration in seconds. On an agent monitor this is the run clock —
+    /// distinct from <see cref="Grace"/>, which governs the schedule window (docs/AGENTS.md §2.2).
+    /// <para>The wire name matches the API's field exactly; <c>max_run_duration</c> is still
+    /// accepted on input as a legacy alias and normalised away by <see cref="ManifestLoader"/>.</para>
+    /// </summary>
+    public int? MaxRunDurationSeconds { get; set; }
+
+    /// <summary>
+    /// Legacy spelling of <see cref="MaxRunDurationSeconds"/>. Accepted so existing manifests keep
+    /// working; never sent to the API, which only knows the <c>_seconds</c> name.
+    /// </summary>
+    [JsonIgnore]
     public int? MaxRunDuration { get; set; }
+
+    // ── Agent monitors ───────────────────────────────────────────────────────────
+    // Field names match the API's job DTO exactly (docs/AGENTS.md §8), so a manifest reads the
+    // same as the API reference. Cost ceilings are USD; 0 clears one.
+
+    /// <summary>Record a success ping carrying no parseable run report as unverified. Default true.</summary>
+    public bool? ReportRequired { get; set; }
+
+    /// <summary>What this agent produces — "tickets", "rows", "documents". Max 40 characters.</summary>
+    public string? ItemsLabel { get; set; }
+
+    /// <summary>Treat a run reporting zero items produced as a failure. Default true.</summary>
+    public bool? RuleEmptyResultEnabled { get; set; }
+
+    /// <summary>Alert when a single run costs more than this, in USD.</summary>
+    public decimal? RuleMaxCostUsdPerRun { get; set; }
+
+    /// <summary>Alert when spend over <see cref="RuleCostPeriod"/> exceeds this, in USD.</summary>
+    public decimal? RuleMaxCostUsdPerPeriod { get; set; }
+
+    /// <summary><c>day</c> or <c>month</c> (default). Buckets use the job's own timezone.</summary>
+    public string? RuleCostPeriod { get; set; }
+
+    /// <summary>Alert when a run's step count exceeds this — loop detection.</summary>
+    public int? RuleMaxSteps { get; set; }
+
+    /// <summary>Alert when a run's tool-call count exceeds this.</summary>
+    public int? RuleMaxToolCalls { get; set; }
+
+    /// <summary>Alert when a run's measured duration exceeds this, in milliseconds.</summary>
+    public int? RuleMaxDurationMs { get; set; }
 
     // ── v2-only per-job fields ───────────────────────────────────────────────────
     /// <summary>Tag references as <c>"key:value"</c> strings. Must resolve to declared tags.</summary>

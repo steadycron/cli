@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Infrastructure;
 using SteadyCron.Cli.Manifest;
 using SteadyCron.Cli.Manifest.Generators;
@@ -11,7 +12,7 @@ namespace SteadyCron.Cli.Commands.Manifest;
 public sealed class AddJobSettings : ManifestAddSettingsBase
 {
     [CommandOption("--kind <KIND>")]
-    [Description("http | heartbeat.")]
+    [Description("http | heartbeat | agent.")]
     public string? Kind { get; set; }
 
     [CommandOption("--name <NAME>")]
@@ -38,8 +39,12 @@ public sealed class AddJobSettings : ManifestAddSettingsBase
     public string? Method { get; set; }
 
     [CommandOption("--grace <SECONDS>")]
-    [Description("heartbeat: grace period seconds (default derived from the schedule).")]
+    [Description("heartbeat|agent: grace period seconds (default derived from the schedule).")]
     public int? Grace { get; set; }
+
+    [CommandOption("--items-label <LABEL>")]
+    [Description("agent: what this agent produces, e.g. \"tickets\" (max 40 chars).")]
+    public string? ItemsLabel { get; set; }
 }
 
 /// <summary>
@@ -100,10 +105,20 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
         int? grace = null;
         string? url = null;
         string? method = null;
+        string? itemsLabel = null;
 
-        if (kind == "heartbeat")
+        if (JobKinds.IsPingDriven(kind))
         {
             grace = ResolveGrace(settings, schedule, interval, timezone, interactive, output);
+
+            if (JobKinds.IsAgent(kind))
+            {
+                itemsLabel = ResolveItemsLabel(settings, interactive, output);
+                if (itemsLabel is null)
+                {
+                    return ExitCodes.Error;
+                }
+            }
         }
         else
         {
@@ -132,6 +147,7 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             Grace = grace,
             Url = url,
             Method = method,
+            ItemsLabel = itemsLabel,
         };
 
         var block = new YamlBlockRenderer().RenderJob(spec);
@@ -153,12 +169,12 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
         if (!string.IsNullOrWhiteSpace(settings.Kind))
         {
             var k = settings.Kind.Trim().ToLowerInvariant();
-            if (k is "http" or "heartbeat")
+            if (ManifestSchema.JobKinds.Contains(k))
             {
                 return k;
             }
 
-            output.Error($"--kind must be 'http' or 'heartbeat' (got '{settings.Kind}').");
+            output.Error($"--kind must be one of {string.Join(", ", ManifestSchema.JobKinds)} (got '{settings.Kind}').");
             return null;
         }
 
@@ -168,7 +184,52 @@ public sealed class AddJobCommand : AsyncCommand<AddJobSettings>
             return null;
         }
 
-        return AnsiConsole.Prompt(new SelectionPrompt<string>().Title(PromptFormatting.Marker("Kind:")).AddChoices("heartbeat", "http"));
+        return AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title(PromptFormatting.Marker("Kind:"))
+                .AddChoices(JobKinds.Heartbeat, JobKinds.Http, JobKinds.Agent));
+    }
+
+    private const string DefaultItemsLabel = "items";
+
+    /// <summary>
+    /// Asking what the agent produces is the point of the kind — it is the unit the empty-result
+    /// rule counts and the word every alert about this monitor will use.
+    /// </summary>
+    private static string? ResolveItemsLabel(AddJobSettings settings, bool interactive, OutputContext output)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.ItemsLabel))
+        {
+            var label = settings.ItemsLabel.Trim();
+            if (label.Length > JobDefaults.ItemsLabelMaxLength)
+            {
+                output.Error($"--items-label must be {JobDefaults.ItemsLabelMaxLength} characters or fewer.");
+                return null;
+            }
+
+            return label;
+        }
+
+        if (!interactive)
+        {
+            return DefaultItemsLabel;
+        }
+
+        while (true)
+        {
+            var raw = AnsiConsole.Prompt(
+                new TextPrompt<string>(
+                        PromptFormatting.Marker($"What does this agent produce? [{Styles.Hint}][[{DefaultItemsLabel}]][/]:"))
+                    .AllowEmpty());
+
+            var label = string.IsNullOrWhiteSpace(raw) ? DefaultItemsLabel : raw.Trim();
+            if (label.Length <= JobDefaults.ItemsLabelMaxLength)
+            {
+                return label;
+            }
+
+            output.Warn($"Keep it to {JobDefaults.ItemsLabelMaxLength} characters or fewer — it is a noun like \"tickets\" or \"rows\".");
+        }
     }
 
     private static string? ResolveName(AddJobSettings settings, bool interactive, OutputContext output)

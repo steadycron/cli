@@ -105,7 +105,8 @@ public sealed class JobMapperTests
             Interval = 300,
             Url = "https://example.com",
         }, 0));
-        Assert.Contains("heartbeat", ex.Message);
+        Assert.Contains("ping-driven", ex.Message);
+        Assert.Contains("url", ex.Message);
     }
 
     [Fact]
@@ -345,12 +346,216 @@ public sealed class JobMapperTests
             Name = "hb",
             Kind = "heartbeat",
             Interval = 3600,
-            MaxRunDuration = 1200,
+            MaxRunDurationSeconds = 1200,
         }, 0);
 
         var result = _mapper.BuildUpdate(specified, server);
-        Assert.Contains(result.Changes, c => c.Field == "max_run_duration");
+        Assert.Contains(result.Changes, c => c.Field == "max_run_duration_seconds");
         Assert.Equal(1200, result.Request.MaxRunDurationSeconds);
+    }
+
+    // ── agent monitors ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Agent_defaults_match_the_api()
+    {
+        var d = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+        }, 0);
+
+        Assert.Equal("agent", d.Kind);
+        Assert.True(d.IsAgent);
+        Assert.False(d.IsHttp);
+        Assert.True(d.ReportRequired);
+        Assert.True(d.RuleEmptyResultEnabled);
+        // Forced on: enforcing /start is what the kind is for.
+        Assert.True(d.StuckRunDetection);
+        Assert.Null(d.ItemsLabel);
+        Assert.Null(d.RuleMaxCostUsdPerRun);
+        Assert.Null(d.RuleCostPeriod);
+    }
+
+    [Fact]
+    public void Agent_carries_outcome_rules_into_the_create_request()
+    {
+        var d = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            ItemsLabel = "tickets",
+            ReportRequired = false,
+            RuleEmptyResultEnabled = false,
+            RuleMaxCostUsdPerRun = 0.5m,
+            RuleMaxCostUsdPerPeriod = 20m,
+            RuleCostPeriod = "day",
+            RuleMaxSteps = 40,
+            RuleMaxToolCalls = 100,
+            RuleMaxDurationMs = 900_000,
+        }, 0);
+
+        var request = _mapper.ToCreateRequest(d);
+
+        Assert.Equal("agent", request.Kind);
+        Assert.Equal("tickets", request.ItemsLabel);
+        Assert.False(request.ReportRequired);
+        Assert.False(request.RuleEmptyResultEnabled);
+        Assert.Equal(0.5m, request.RuleMaxCostUsdPerRun);
+        Assert.Equal(20m, request.RuleMaxCostUsdPerPeriod);
+        Assert.Equal(AgentCostPeriod.Day, request.RuleCostPeriod);
+        Assert.Equal(40, request.RuleMaxSteps);
+        Assert.Equal(100, request.RuleMaxToolCalls);
+        Assert.Equal(900_000, request.RuleMaxDurationMs);
+        // The API forces it true and rejects the field; sending it would be noise at best.
+        Assert.Null(request.StuckRunDetection);
+    }
+
+    [Fact]
+    public void Agent_defaults_the_cost_period_to_month_when_a_period_ceiling_is_set()
+    {
+        var d = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            RuleMaxCostUsdPerPeriod = 20m,
+        }, 0);
+
+        Assert.Equal(AgentCostPeriod.Month, d.RuleCostPeriod);
+    }
+
+    [Fact]
+    public void Agent_treats_a_zero_ceiling_as_no_ceiling()
+    {
+        var d = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            RuleMaxCostUsdPerRun = 0m,
+            RuleMaxSteps = 0,
+        }, 0);
+
+        Assert.Null(d.RuleMaxCostUsdPerRun);
+        Assert.Null(d.RuleMaxSteps);
+    }
+
+    [Fact]
+    public void Agent_rejects_disabling_stuck_run_detection()
+    {
+        var ex = Assert.Throws<ManifestException>(() => _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            StuckRunDetection = false,
+        }, 0));
+
+        Assert.Contains("stuck_run_detection", ex.Message);
+    }
+
+    [Fact]
+    public void Agent_rejects_an_overlong_items_label()
+    {
+        var ex = Assert.Throws<ManifestException>(() => _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            ItemsLabel = new string('x', 41),
+        }, 0));
+
+        Assert.Contains("items_label", ex.Message);
+    }
+
+    [Fact]
+    public void Agent_rejects_a_cost_period_without_a_period_ceiling()
+    {
+        var ex = Assert.Throws<ManifestException>(() => _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            RuleCostPeriod = "month",
+        }, 0));
+
+        Assert.Contains("rule_cost_period", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("http")]
+    [InlineData("heartbeat")]
+    public void Agent_fields_are_rejected_on_other_kinds(string kind)
+    {
+        var job = new ManifestJob
+        {
+            Name = "job",
+            Kind = kind,
+            Interval = 300,
+            ItemsLabel = "tickets",
+        };
+
+        if (kind == "http") { job.Url = "https://example.com"; }
+
+        var ex = Assert.Throws<ManifestException>(() => _mapper.ToDesired(job, 0));
+        Assert.Contains("items_label", ex.Message);
+        Assert.Contains("agent monitors", ex.Message);
+    }
+
+    [Fact]
+    public void Agent_diff_sends_zero_to_clear_a_ceiling()
+    {
+        var desired = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+        }, 0);
+
+        var server = ServerFromAgent(desired) with { RuleMaxCostUsdPerRun = 0.5m, RuleMaxSteps = 40 };
+
+        var result = _mapper.BuildUpdate(desired, server);
+
+        Assert.True(result.HasChanges);
+        Assert.Equal(0m, result.Request.RuleMaxCostUsdPerRun);
+        Assert.Equal(0, result.Request.RuleMaxSteps);
+    }
+
+    [Fact]
+    public void Agent_diff_reports_write_once_fields_without_sending_them()
+    {
+        var desired = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+            ReportRequired = false,
+        }, 0);
+
+        var server = ServerFromAgent(desired) with { ReportRequired = true };
+
+        var result = _mapper.BuildUpdate(desired, server);
+
+        // PATCH cannot express it (docs/AGENTS.md §8) — surface the drift, don't pretend it applied.
+        Assert.Contains(result.Changes, c => c.Field.StartsWith("report_required", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Agent_diff_ignores_stuck_run_detection()
+    {
+        var desired = _mapper.ToDesired(new ManifestJob
+        {
+            Name = "triage",
+            Kind = "agent",
+            Schedule = "0 3 * * *",
+        }, 0);
+
+        var server = ServerFromAgent(desired) with { StuckRunDetection = false };
+
+        Assert.DoesNotContain(_mapper.BuildUpdate(desired, server).Changes, c => c.Field == "stuck_run_detection");
     }
 
     // ── helpers: build a server JobResponse that matches a desired job exactly ─────
@@ -395,5 +600,31 @@ public sealed class JobMapperTests
         GraceSeconds = d.GraceSeconds,
         StuckRunDetection = d.StuckRunDetection,
         MaxRunDurationSeconds = d.MaxRunDurationSeconds ?? 0,
+    };
+
+    private static JobResponse ServerFromAgent(DesiredJob d) => new()
+    {
+        Id = Guid.NewGuid(),
+        Kind = "agent",
+        Name = d.Name,
+        Description = d.Description,
+        RunbookNotes = d.RunbookNotes,
+        RunbookUrl = d.RunbookUrl,
+        ScheduleKind = d.ScheduleKind == ScheduleKind.Cron ? "cron" : "interval",
+        CronExpression = d.CronExpression,
+        IntervalSeconds = d.IntervalSeconds,
+        Timezone = d.Timezone,
+        GraceSeconds = d.GraceSeconds,
+        StuckRunDetection = d.StuckRunDetection,
+        MaxRunDurationSeconds = d.MaxRunDurationSeconds ?? 0,
+        ReportRequired = d.ReportRequired,
+        ItemsLabel = d.ItemsLabel,
+        RuleEmptyResultEnabled = d.RuleEmptyResultEnabled,
+        RuleMaxCostUsdPerRun = d.RuleMaxCostUsdPerRun,
+        RuleMaxCostUsdPerPeriod = d.RuleMaxCostUsdPerPeriod,
+        RuleCostPeriod = d.RuleCostPeriod?.ToString().ToLowerInvariant(),
+        RuleMaxSteps = d.RuleMaxSteps,
+        RuleMaxToolCalls = d.RuleMaxToolCalls,
+        RuleMaxDurationMs = d.RuleMaxDurationMs,
     };
 }

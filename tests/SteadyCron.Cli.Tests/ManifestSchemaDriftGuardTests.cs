@@ -70,6 +70,51 @@ public sealed class ManifestSchemaDriftGuardTests
     }
 
     [Fact]
+    public void CheatSheet_jobKindList_matchesManifestSchema()
+    {
+        const string marker = "# http (default) | heartbeat | agent";
+        Assert.Contains(marker, InitCommand.YamlBoilerplate, StringComparison.Ordinal);
+
+        var listed = marker.TrimStart('#', ' ').Replace("http (default)", "http")
+            .Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(ManifestSchema.JobKinds.OrderBy(k => k, StringComparer.Ordinal),
+            listed.OrderBy(k => k, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CheatSheet_documentsEveryJobKindAsAWorkedExample()
+    {
+        // Every kind gets a real block in the scaffold, not just a mention in the `kind:` comment.
+        foreach (var kind in ManifestSchema.JobKinds)
+        {
+            Assert.Contains($"kind: {kind}", InitCommand.YamlBoilerplate, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void CheatSheet_agentCostPeriods_matchManifestSchema()
+    {
+        const string marker = "# day | month";
+        Assert.Contains(marker, InitCommand.YamlBoilerplate, StringComparison.Ordinal);
+
+        var listed = marker.TrimStart('#', ' ')
+            .Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(ManifestSchema.AgentCostPeriods.OrderBy(p => p, StringComparer.Ordinal),
+            listed.OrderBy(p => p, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void JobKindSchema_matchesTheWireContract()
+    {
+        // ManifestSchema must not fork its own list — the manifest and the API client have to
+        // agree on what a kind is called, or `kind: agent` validates locally and 400s on apply.
+        Assert.Equal(SteadyCron.Cli.Api.Models.JobKinds.All, ManifestSchema.JobKinds);
+        Assert.Equal(3, ManifestSchema.JobKinds.Count);
+    }
+
+    [Fact]
     public void HttpMethodSchema_neverIncludesHead()
     {
         // The exact regression SPEC-20c fixed in the cheat sheet — HEAD isn't a valid job method

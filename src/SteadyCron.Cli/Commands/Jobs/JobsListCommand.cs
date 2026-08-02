@@ -9,7 +9,7 @@ namespace SteadyCron.Cli.Commands.Jobs;
 public sealed class JobsListSettings : CliSettings
 {
     [CommandOption("--kind <KIND>")]
-    [Description("Filter by kind: http or heartbeat.")]
+    [Description("Filter by kind: http, heartbeat, or agent.")]
     public string? Kind { get; set; }
 
     [CommandOption("--status <STATUS>")]

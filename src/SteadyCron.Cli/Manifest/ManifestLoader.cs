@@ -64,7 +64,25 @@ public sealed class ManifestLoader
         }
 
         manifest.Jobs ??= [];
+        Normalize(manifest);
         return manifest;
+    }
+
+    /// <summary>
+    /// Folds legacy field spellings onto their canonical wire names, so everything downstream —
+    /// validation, the sync mapper, and the manifest sent verbatim to <c>POST /api/reconcile</c> —
+    /// sees exactly one name per field.
+    /// </summary>
+    private static void Normalize(ManifestFile manifest)
+    {
+        foreach (var job in manifest.Jobs ?? [])
+        {
+            if (job.MaxRunDuration is { } legacy)
+            {
+                job.MaxRunDurationSeconds ??= legacy;
+                job.MaxRunDuration = null;
+            }
+        }
     }
 
     // ── Multi-file / directory API ────────────────────────────────────────────────

@@ -77,11 +77,13 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
 
         // ── KPI summary ────────────────────────────────────────────────────────────
         // Calculations mirror the web Overview page exactly.
-        // total_checks = total_executions (HTTP) + heartbeat check-ins (success/fail pings).
-        // heartbeat count derived as total_checks − total_executions, same as the web.
+        // total_checks = total_executions (HTTP) + inbound check-ins (success/fail pings).
+        // The check-in count is derived as total_checks − total_executions, same as the web, and
+        // so covers both ping-driven kinds — it is labelled "monitor", not "heartbeat", because an
+        // account with agent monitors would otherwise see their runs counted as heartbeats.
 
         var httpChecks = s.TotalExecutions;
-        var heartbeatChecks = Math.Max(0, s.TotalChecks - s.TotalExecutions);
+        var monitorChecks = Math.Max(0, s.TotalChecks - s.TotalExecutions);
 
         double? successRate = s.TotalChecks > 0
             ? (double)s.SuccessfulChecks / s.TotalChecks * 100
@@ -105,7 +107,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         kpi.AddRow(
             "[bold]Total checks[/]",
             $"[white]{s.TotalChecks}[/]",
-            $"{httpChecks} HTTP {bullet} {heartbeatChecks} heartbeat");
+            $"{httpChecks} HTTP {bullet} {monitorChecks} monitor");
 
         kpi.AddRow(
             "[bold]Successful[/]",
@@ -390,11 +392,18 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
         }
         else
         {
+            // An agent user never configured a "heartbeat", so the wording branches on kind
+            // rather than sorting every non-HTTP job under the heartbeat vocabulary.
             reason = status switch
             {
-                "missed" => kind == "heartbeat" ? "Missed check-in" : "Missed scheduled run",
+                "missed" => JobKinds.IsAgent(kind) ? "No run reported"
+                    : JobKinds.IsHeartbeat(kind) ? "Missed check-in"
+                    : "Missed scheduled run",
                 "abandoned" => "Started but never completed",
-                "late" => kind == "heartbeat" ? "Check-in overdue" : "Run overdue",
+                "late" => JobKinds.IsAgent(kind) ? "Run overdue"
+                    : JobKinds.IsHeartbeat(kind) ? "Check-in overdue"
+                    : "Run overdue",
+                "unverified" => "Ran, but reported no results",
                 "failure" => "Execution failed",
                 _ => glyphs.NoValue,
             };
@@ -424,7 +433,7 @@ public sealed class ReportCommand : SteadyCronCommandBase<ReportSettings>
     }
 
     private static string KindLabel(string kind) =>
-        kind == "heartbeat" ? "Heartbeat" : "HTTP";
+        JobKinds.IsAgent(kind) ? "Agent" : JobKinds.IsHeartbeat(kind) ? "Heartbeat" : "HTTP";
 
     private static void RenderFailedJob(ReportJobSummary job, bool verbose, OutputContext output)
     {

@@ -19,7 +19,9 @@ public static class JobFormatting
         {
             "success" => "green",
             "running" => "blue",
-            "late" or "abandoned" => "yellow",
+            // Amber, not red: an unverified run is "off, but not certainly failed" — the report
+            // never arrived, so the outcome is unproven rather than known bad.
+            "late" or "abandoned" or "unverified" => "yellow",
             "skipped" => "grey",
             "paused" => "grey",
             "missed" or "failure" => "red",
@@ -40,8 +42,8 @@ public static class JobFormatting
             return StatusMarkup(job.Status);
         }
 
-        var label = string.Equals(job.Kind, "heartbeat", StringComparison.OrdinalIgnoreCase)
-            ? "waiting for ping"
+        var label = job.IsAgent ? "waiting for first report"
+            : job.IsPingDriven ? "waiting for ping"
             : "awaiting first run";
         return $"[yellow]{Markup.Escape(label)}[/]";
     }
@@ -72,7 +74,7 @@ public static class JobFormatting
                 Markup.Escape(job.Kind),
                 StatusMarkup(job),
                 Markup.Escape(ScheduleWithTz(job)),
-                Markup.Escape(job.Kind == "http" ? When(job.NextFireAt) : "—"),
+                Markup.Escape(JobKinds.IsHttp(job.Kind) ? When(job.NextFireAt) : "—"),
                 Markup.Escape(When(job.LastFireAt)),
                 Markup.Escape(job.JobKey ?? "—"));
         }
@@ -140,7 +142,7 @@ public static class JobFormatting
     }
 
     /// <summary>
-    /// Renders the three ping URLs for a heartbeat monitor to the output.
+    /// Renders the three ping URLs for a ping-driven job (heartbeat or agent monitor).
     /// Optionally prefixes with a bold job-name header.
     /// </summary>
     public static void RenderPingUrls(OutputContext output, string? name, PingUrls urls)
@@ -164,8 +166,13 @@ public static class JobFormatting
     /// never all of them. This is the single most action-critical line in the flow, so it renders
     /// bold green, never dim. A blank string marks a blank output line.
     /// </summary>
-    internal static IReadOnlyList<string> BuildPingSnippetLines(PingUrls urls, string? cronExpression)
+    internal static IReadOnlyList<string> BuildPingSnippetLines(PingUrls urls, string? cronExpression, string? kind = null)
     {
+        if (JobKinds.IsAgent(kind))
+        {
+            return BuildAgentReportSnippetLines(urls);
+        }
+
         var lines = new List<string>();
 
         if (OperatingSystem.IsWindows())
@@ -191,12 +198,40 @@ public static class JobFormatting
         return lines;
     }
 
+    private const string AgentDocsUrl = "https://steadycron.com/docs/agent-monitoring";
+
+    /// <summary>
+    /// The agent equivalent of the crontab snippet: an agent run is an ordered <em>pair</em> of
+    /// calls carrying a JSON report, so showing a single bare success URL would teach the wrong
+    /// contract. <c>/start</c> is mandatory — a <c>/success</c> with no run open is refused.
+    /// </summary>
+    private static IReadOnlyList<string> BuildAgentReportSnippetLines(PingUrls urls)
+    {
+        return
+        [
+            "Report each run as an ordered pair — /start when it begins, /success when it ends:",
+            string.Empty,
+            $"    [bold green]curl -fsS {Markup.Escape(urls.Start)}[/]",
+            string.Empty,
+            "    # … the agent does its work …",
+            string.Empty,
+            $"    [bold green]curl -fsS -X POST {Markup.Escape(urls.Success)} \\[/]",
+            "    [bold green]      -H 'Content-Type: application/json' \\[/]",
+            "    [bold green]      -d '{\"itemsProduced\": 42, \"model\": \"claude-opus-5\", \"costUsd\": 0.84}'[/]",
+            string.Empty,
+            "Every report field is optional, but itemsProduced is the one that matters: it is what",
+            "the empty-result rule reads. Report a failure with the same body on the fail URL.",
+            string.Empty,
+            $"Report fields, MCP, and framework examples: [cyan]{AgentDocsUrl}[/]",
+        ];
+    }
+
     /// <summary>Shared by <c>jobs create</c> and the <c>init</c> wizard so both print byte-identical guidance.</summary>
-    public static void RenderPingSnippet(OutputContext output, PingUrls urls, string? cronExpression)
+    public static void RenderPingSnippet(OutputContext output, PingUrls urls, string? cronExpression, string? kind = null)
     {
         output.Line();
 
-        foreach (var line in BuildPingSnippetLines(urls, cronExpression))
+        foreach (var line in BuildPingSnippetLines(urls, cronExpression, kind))
         {
             if (line.Length == 0)
             {

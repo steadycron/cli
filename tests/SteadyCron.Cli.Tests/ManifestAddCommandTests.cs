@@ -67,6 +67,48 @@ public sealed class ManifestAddCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task AddJob_agentKind_writesOutcomeRulesAndPasses_Validate()
+    {
+        var settings = new AddJobSettings
+        {
+            File = _path,
+            Kind = "agent",
+            Name = "nightly-triage",
+            Schedule = "0 3 * * *",
+            Grace = 600,
+            ItemsLabel = "tickets",
+        };
+
+        var exit = await new AddJobCommand().ExecuteAsync(null!, settings);
+
+        Assert.Equal(ExitCodes.Ok, exit);
+        var content = await File.ReadAllTextAsync(_path);
+        Assert.Contains("kind: agent", content, StringComparison.Ordinal);
+        Assert.Contains("items_label: tickets", content, StringComparison.Ordinal);
+        // The two clocks are both written out — one of them defaulting silently is the bug
+        // docs/AGENTS.md §2.2 exists to prevent.
+        Assert.Contains("grace: 600", content, StringComparison.Ordinal);
+        Assert.Contains("max_run_duration_seconds:", content, StringComparison.Ordinal);
+        AssertValidates(content);
+    }
+
+    [Fact]
+    public async Task AddJob_agentKind_rejectsAnOverlongItemsLabel()
+    {
+        var settings = new AddJobSettings
+        {
+            File = _path,
+            Kind = "agent",
+            Name = "nightly-triage",
+            Schedule = "0 3 * * *",
+            ItemsLabel = new string('x', 41),
+        };
+
+        Assert.Equal(ExitCodes.Error, await new AddJobCommand().ExecuteAsync(null!, settings));
+        Assert.False(File.Exists(_path));
+    }
+
+    [Fact]
     public async Task AddJob_duplicateName_failsWithExitCode2_fileUntouched()
     {
         var settings = new AddJobSettings { File = _path, Kind = "heartbeat", Name = "dup-job", Schedule = "0 2 * * *" };

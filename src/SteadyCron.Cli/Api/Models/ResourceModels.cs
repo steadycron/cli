@@ -56,8 +56,17 @@ public enum AlertTrigger
     OnNConsecutive,
     OnMissedHeartbeat,
     OnRecovery,
+
+    // Smart / anomaly triggers (HTTP jobs) — per-execution response checks.
     OnSlowRun,
     OnSizeAnomaly,
+
+    // Agent monitor triggers, evaluated server-side against each run report. OnSlowRun is reused
+    // for an agent's duration ceiling rather than adding a fourth.
+    OnEmptyResult,
+    OnCostExceeded,
+    OnNoProgress,
+    OnUnverifiedRun,
 }
 
 /// <summary>Alert severity. Serialized snake_case for requests (<c>p1</c>/<c>p2</c>/<c>p3</c>).</summary>

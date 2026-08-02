@@ -21,7 +21,7 @@ public sealed class LogbookSettings : CliSettings
     public string[]? Severity { get; set; }
 
     [CommandOption("--domain <DOMAIN>")]
-    [Description("Filter by category: executions, heartbeats, alerts, jobs, keys, rules, channels, subscription. Repeat for multiple.")]
+    [Description("Filter by category: executions, heartbeats, agents, alerts, jobs, keys, rules, channels, subscription. Repeat for multiple.")]
     public string[]? Domain { get; set; }
 
     [CommandOption("--job <JOB>")]
@@ -82,7 +82,7 @@ public sealed class LogbookCommand : SteadyCronCommandBase<LogbookSettings>
                 if (resolved is null)
                 {
                     throw new CliException(
-                        $"Unknown domain '{d}'. Valid values: executions, heartbeats, alerts, jobs, keys, rules, channels, subscription.",
+                        $"Unknown domain '{d}'. Valid values: executions, heartbeats, agents, alerts, jobs, keys, rules, channels, subscription.",
                         ExitCodes.Error);
                 }
 

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Spectre.Console.Cli;
+using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
 using SteadyCron.Cli.Output;
@@ -9,14 +10,14 @@ namespace SteadyCron.Cli.Commands.Jobs;
 public sealed class JobPingUrlsSettings : CliSettings
 {
     [CommandArgument(0, "[JOB]")]
-    [Description("Heartbeat job key, name, or id. Omit to list every heartbeat monitor.")]
+    [Description("Heartbeat or agent monitor key, name, or id. Omit to list every monitor.")]
     public string? Identifier { get; set; }
 }
 
 /// <summary>
-/// `steadycron jobs ping-urls [job]` — prints the success/start/fail ping URLs for
-/// heartbeat monitors. Omitting the job argument lists all heartbeat jobs at once,
-/// which is useful right after a manifest apply.
+/// `steadycron jobs ping-urls [job]` — prints the success/start/fail ping URLs for the
+/// ping-driven kinds (heartbeat and agent monitors). Omitting the job argument lists them all at
+/// once, which is useful right after a manifest apply.
 /// </summary>
 public sealed class JobPingUrlsCommand : SteadyCronCommandBase<JobPingUrlsSettings>
 {
@@ -31,10 +32,10 @@ public sealed class JobPingUrlsCommand : SteadyCronCommandBase<JobPingUrlsSettin
         {
             var job = await JobLookup.ResolveAsync(client, settings.Identifier, ct);
 
-            if (job.Kind != "heartbeat")
+            if (!job.IsPingDriven)
             {
                 throw new CliException(
-                    $"'{job.Name}' is an HTTP job — ping URLs only exist for heartbeat monitors.",
+                    $"'{job.Name}' is an HTTP job — ping URLs only exist for heartbeat and agent monitors.",
                     ExitCodes.Error);
             }
 
@@ -48,9 +49,12 @@ public sealed class JobPingUrlsCommand : SteadyCronCommandBase<JobPingUrlsSettin
             return ExitCodes.Ok;
         }
 
-        // No identifier → list all heartbeat monitors.
-        var jobs = (await client.ListAllJobsAsync(kind: "heartbeat", ct: ct))
+        // No identifier → list every monitor that has ping URLs. The kind filter is one value per
+        // request, so both ping-driven kinds are fetched rather than filtering on !http.
+        var jobs = (await client.ListAllJobsAsync(kind: JobKinds.Heartbeat, ct: ct))
+            .Concat(await client.ListAllJobsAsync(kind: JobKinds.Agent, ct: ct))
             .Where(j => j.PingUrls is not null)
+            .OrderBy(j => j.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (output.Json)
@@ -66,7 +70,7 @@ public sealed class JobPingUrlsCommand : SteadyCronCommandBase<JobPingUrlsSettin
 
         if (jobs.Count == 0)
         {
-            output.Info("No heartbeat monitors found.");
+            output.Info("No heartbeat or agent monitors found.");
             return ExitCodes.Ok;
         }
 

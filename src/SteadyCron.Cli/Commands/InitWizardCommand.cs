@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -35,10 +36,13 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
     }
 
     private const string HeartbeatChoice = "Monitor an existing cron job (heartbeat)";
+    private const string AgentChoice = "Monitor an AI agent (checks what each run produced)";
     private const string HttpChoice = "Schedule a new HTTP job (we call your URL)";
     private const string SkipChoice = "Skip — just set up the manifest workflow";
 
     private const string DefaultHeartbeatSchedule = "*/15 * * * *";
+    private const string DefaultAgentSchedule = "0 3 * * *";
+    private const string DefaultItemsLabel = "items";
 
     protected override async Task<int> RunAsync(CliSettings settings, OutputContext output, CancellationToken ct)
     {
@@ -53,7 +57,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         var choice = output.Out.Prompt(
             new SelectionPrompt<string>()
                 .Title(PromptFormatting.Marker("What do you want to do?"))
-                .AddChoices(HeartbeatChoice, HttpChoice, SkipChoice));
+                .AddChoices(HeartbeatChoice, AgentChoice, HttpChoice, SkipChoice));
 
         if (choice == SkipChoice)
         {
@@ -66,9 +70,12 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
         var channel = await EnsureDefaultChannelAsync(client, output, ct);
 
-        var job = choice == HeartbeatChoice
-            ? await RunHeartbeatWizardAsync(client, channel.Id, output, ct)
-            : await RunHttpWizardAsync(client, channel.Id, output, ct);
+        var job = choice switch
+        {
+            HeartbeatChoice => await RunHeartbeatWizardAsync(client, channel.Id, output, ct),
+            AgentChoice => await RunAgentWizardAsync(client, channel.Id, output, ct),
+            _ => await RunHttpWizardAsync(client, channel.Id, output, ct),
+        };
 
         output.Success(BuildAlertConfirmation(job.Kind, channel));
 
@@ -79,7 +86,7 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
 
         if (job.PingUrls is { } urls)
         {
-            JobFormatting.RenderPingSnippet(output, urls, job.CronExpression);
+            JobFormatting.RenderPingSnippet(output, urls, job.CronExpression, job.Kind);
         }
 
         PrintReadmeBadgeSnippet(output, job);
@@ -123,9 +130,14 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         var email = channel.Kind == "email" ? channel.Config?.GetValueOrDefault("to") : null;
         var destination = email is not null ? $"email {email}" : "email your default alert channel";
 
-        return jobKind == "heartbeat"
-            ? $"If a ping doesn't arrive on time, we'll {destination}."
-            : $"If a run fails, we'll {destination}.";
+        return jobKind switch
+        {
+            // The agent line names the empty-run case on purpose: it is the failure a plain cron
+            // monitor cannot see, and the reason the kind exists.
+            JobKinds.Agent => $"If a run is missed, fails, or produces nothing, we'll {destination}.",
+            JobKinds.Heartbeat => $"If a ping doesn't arrive on time, we'll {destination}.",
+            _ => $"If a run fails, we'll {destination}.",
+        };
     }
 
     private static async Task<AlertChannelResponse> EnsureDefaultChannelAsync(SteadyCronClient client, OutputContext output, CancellationToken ct)
@@ -179,6 +191,75 @@ public sealed class InitWizardCommand : SteadyCronCommandBase<CliSettings>
         {
             ChannelId = channelId,
             Trigger = AlertTrigger.OnMissedHeartbeat,
+        }, ct);
+
+        return job;
+    }
+
+    /// <summary>
+    /// Creates an agent monitor. Deliberately asks for only two things beyond the schedule — what
+    /// the agent produces, and a per-run spend ceiling — because those are the two the user can
+    /// answer on day one. Every other outcome rule has a sensible default and lives in the
+    /// manifest the wizard writes out afterwards.
+    /// </summary>
+    private async Task<JobResponse> RunAgentWizardAsync(SteadyCronClient client, Guid channelId, OutputContext output, CancellationToken ct)
+    {
+        var name = output.Out.Prompt(new TextPrompt<string>(PromptFormatting.Marker("Agent name:")));
+
+        var schedule = await PromptCronWithDefaultAsync(
+            client, output, $"Expected schedule (cron) [[{DefaultAgentSchedule}]]:", DefaultAgentSchedule, ct);
+
+        var timezone = await PromptTimezoneAsync(client, output, ct);
+
+        var preview = await client.PreviewCronAsync(new CronPreviewRequest(schedule, timezone, 5), ct);
+        PrintNextFires(output, preview, timezone);
+
+        var graceDefault = CronScheduleHelper.ComputeGraceDefault(preview.NextFires);
+        var graceText = output.Out.Prompt(
+            new TextPrompt<string>(PromptFormatting.Marker($"Grace period seconds [{Styles.Hint}][[{graceDefault}]][/]:")).AllowEmpty());
+        var grace = string.IsNullOrWhiteSpace(graceText) ? graceDefault : int.Parse(graceText);
+
+        var itemsLabelText = output.Out.Prompt(
+            new TextPrompt<string>(
+                    PromptFormatting.Marker($"What does this agent produce? [{Styles.Hint}][[{DefaultItemsLabel}]][/]:"))
+                .AllowEmpty());
+        var itemsLabel = string.IsNullOrWhiteSpace(itemsLabelText) ? DefaultItemsLabel : itemsLabelText.Trim();
+
+        var costText = output.Out.Prompt(
+            new TextPrompt<string>(
+                    PromptFormatting.Marker($"Alert if one run costs more than (USD) [{Styles.Hint}][[no ceiling]][/]:"))
+                .AllowEmpty());
+        var maxCostPerRun = decimal.TryParse(costText, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedCost)
+            ? parsedCost
+            : (decimal?)null;
+
+        var manifestJob = new ManifestJob
+        {
+            Name = name,
+            Kind = JobKinds.Agent,
+            Schedule = schedule,
+            Timezone = timezone,
+            Grace = grace,
+            ItemsLabel = itemsLabel,
+            RuleMaxCostUsdPerRun = maxCostPerRun,
+        };
+
+        var desired = _mapper.ToDesired(manifestJob, 0);
+        var job = await client.CreateJobAsync(_mapper.ToCreateRequest(desired), ct);
+        output.Success($"Created agent monitor {job.Name}.");
+
+        // A run that produces nothing is the case the kind exists for, so wire that rule up
+        // alongside the missed-run one rather than leaving the finding to alert against nothing.
+        await client.CreateRuleAsync(job.Id, new CreateAlertRuleRequest
+        {
+            ChannelId = channelId,
+            Trigger = AlertTrigger.OnMissedHeartbeat,
+        }, ct);
+
+        await client.CreateRuleAsync(job.Id, new CreateAlertRuleRequest
+        {
+            ChannelId = channelId,
+            Trigger = AlertTrigger.OnEmptyResult,
         }, ct);
 
         return job;

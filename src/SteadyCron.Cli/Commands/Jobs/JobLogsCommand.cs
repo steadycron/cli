@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
 using SteadyCron.Cli.Output;
@@ -29,9 +30,13 @@ public sealed class JobLogsCommand : SteadyCronCommandBase<JobLogsSettings>
         var client = CreateClient(settings);
         var job = await JobLookup.ResolveAsync(client, settings.Identifier, ct);
 
-        if (job.Kind != "http")
+        if (!JobKinds.IsHttp(job.Kind))
         {
-            throw new CliException("Execution logs are only available for HTTP jobs. For heartbeats, view pings in the dashboard.", ExitCodes.Error);
+            throw new CliException(
+                job.IsAgent
+                    ? "Execution logs are only available for HTTP jobs. For an agent monitor, view its run reports in the dashboard."
+                    : "Execution logs are only available for HTTP jobs. For heartbeats, view pings in the dashboard.",
+                ExitCodes.Error);
         }
 
         var pageSize = Math.Clamp(settings.Limit, 1, 100);

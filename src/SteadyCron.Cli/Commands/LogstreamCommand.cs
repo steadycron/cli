@@ -22,7 +22,7 @@ public sealed class LogstreamSettings : CliSettings
     public string[]? Severity { get; set; }
 
     [CommandOption("--domain <DOMAIN>")]
-    [Description("Filter by category: executions, heartbeats, alerts, jobs, keys, rules, channels, subscription. Repeat for multiple.")]
+    [Description("Filter by category: executions, heartbeats, agents, alerts, jobs, keys, rules, channels, subscription. Repeat for multiple.")]
     public string[]? Domain { get; set; }
 
     [CommandOption("--job <JOB>")]
@@ -88,7 +88,7 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
                 if (resolved is null)
                 {
                     throw new CliException(
-                        $"Unknown domain '{d}'. Valid values: executions, heartbeats, alerts, jobs, keys, rules, channels, subscription.",
+                        $"Unknown domain '{d}'. Valid values: executions, heartbeats, agents, alerts, jobs, keys, rules, channels, subscription.",
                         ExitCodes.Error);
                 }
 
@@ -292,11 +292,16 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
     {
         "execution_failure" => IsFinalAttempt(e) ? "red" : "yellow",
         "heartbeat_missed" or "run_abandoned" or "ping_fail" or "alert_failed" => "red",
+        "agent_run_missed" or "agent_run_failed" => "red",
+        // Amber: an unverified or abandoned run is "off, but not certainly failed" — red is
+        // reserved for outcomes we know went wrong.
+        "agent_run_unverified" or "agent_run_abandoned" => "yellow",
         _ => null,
     };
 
     private static bool SuccessEvent(string eventType) => eventType is
-        "execution_success" or "heartbeat_recovered" or "ping_success" or "alert_delivered";
+        "execution_success" or "heartbeat_recovered" or "ping_success" or "alert_delivered"
+        or "agent_run_completed" or "agent_run_recovered";
 
     // Returns true when is_final_attempt is explicitly true, or when the metadata key is
     // absent (older API versions; treat unknown as final to avoid under-reporting).
@@ -322,6 +327,8 @@ public sealed class LogstreamCommand : SteadyCronCommandBase<LogstreamSettings>
                 return BuildFailureDetail(e, glyphs);
             case "heartbeat_missed":
             case "run_abandoned":
+            case "agent_run_missed":
+            case "agent_run_abandoned":
                 return BuildHeartbeatDetail(e);
             default:
                 return e.Detail ?? "";

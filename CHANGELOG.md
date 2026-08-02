@@ -4,7 +4,43 @@ All notable changes to the SteadyCron CLI are documented here. The format follow
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.17.0] - 2026-08-02
+
+### Added
+
+- **AI agent monitors (`kind: agent`)** — SteadyCron's third job kind is now a first-class CLI
+  citizen. An agent monitor is pinged like a heartbeat, but each run posts a JSON report that the
+  server judges against per-job outcome rules, so an agent that exits 0 having produced nothing is
+  a failure rather than a green check.
+  - **Manifest**: `kind: agent` plus `items_label`, `report_required`,
+    `rule_empty_result_enabled`, `rule_max_cost_usd_per_run`, `rule_max_cost_usd_per_period`,
+    `rule_cost_period`, `rule_max_steps`, `rule_max_tool_calls`, and `rule_max_duration_ms`.
+    Validated locally by `validate`, `plan`, and `apply`, with bounds matching the API's, so a bad
+    manifest fails with the field named instead of as a 400 halfway through an apply.
+  - **`jobs create`**: `--kind agent` with `--items-label`, `--no-report-required`,
+    `--allow-empty-result`, `--max-cost-per-run`, `--max-cost-per-period`, `--cost-period`,
+    `--max-steps`, `--max-tool-calls`, and `--max-duration-ms`.
+  - **`manifest add job --kind agent`** and **`manifest scaffold`** both cover the kind, including
+    the two separate clocks (`grace` for when the run must start, `max_run_duration_seconds` for
+    how long it may then take) and every outcome rule.
+  - **`init`** offers "Monitor an AI agent" and wires up the empty-result alert rule alongside the
+    missed-run one — without it the server's finding would alert against nothing.
+  - **`jobs snippet`** emits the agent reporting contract (an ordered `/start` → `/success` pair
+    carrying a JSON body) for bash, Python, Node, and GitHub Actions, rather than the heartbeat's
+    single bare `curl`.
+  - **`rules add --trigger`** accepts `empty_result`, `cost_exceeded`, `no_progress`, and
+    `unverified_run`.
+  - **`logbook` / `logstream`**: new `agents` domain covering the seven `agent_run_*` event types.
+
+### Fixed
+
+- **`jobs ping-urls`, `jobs snippet`, and the post-apply ping-URL summary skipped agent monitors**
+  entirely, and `jobs logs` / `report` labelled them as heartbeats. Every one of these tested
+  `kind == "heartbeat"` or `kind != "http"`, which stopped being a correct stand-in for
+  "ping-driven" / "HTTP-executed" once a third kind existed.
+- **`max_run_duration` was silently dropped on `apply`.** The manifest field is now
+  `max_run_duration_seconds`, matching what the API actually reads; the old spelling is still
+  accepted and normalised on load, so existing manifests keep working.
 
 ## [1.16.0] - 2026-07-05
 

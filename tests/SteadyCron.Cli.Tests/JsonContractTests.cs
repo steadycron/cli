@@ -92,6 +92,127 @@ public sealed class JsonContractTests
     }
 
     [Fact]
+    public void CreateJobRequest_serializes_agent_settings_with_the_api_field_names()
+    {
+        var request = new CreateJobRequest
+        {
+            Name = "nightly-triage",
+            Kind = "agent",
+            ScheduleKind = ScheduleKind.Cron,
+            CronExpression = "0 3 * * *",
+            ItemsLabel = "tickets",
+            ReportRequired = false,
+            RuleEmptyResultEnabled = false,
+            RuleMaxCostUsdPerRun = 0.5m,
+            RuleMaxCostUsdPerPeriod = 20m,
+            RuleCostPeriod = AgentCostPeriod.Day,
+            RuleMaxSteps = 40,
+            RuleMaxToolCalls = 100,
+            RuleMaxDurationMs = 900_000,
+        };
+
+        var json = JsonSerializer.Serialize(request, SteadyCronJson.Options);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal("agent", root.GetProperty("kind").GetString());
+        Assert.Equal("tickets", root.GetProperty("items_label").GetString());
+        Assert.False(root.GetProperty("report_required").GetBoolean());
+        Assert.False(root.GetProperty("rule_empty_result_enabled").GetBoolean());
+        Assert.Equal(0.5m, root.GetProperty("rule_max_cost_usd_per_run").GetDecimal());
+        Assert.Equal(20m, root.GetProperty("rule_max_cost_usd_per_period").GetDecimal());
+        Assert.Equal("day", root.GetProperty("rule_cost_period").GetString());
+        Assert.Equal(40, root.GetProperty("rule_max_steps").GetInt32());
+        Assert.Equal(100, root.GetProperty("rule_max_tool_calls").GetInt32());
+        Assert.Equal(900_000, root.GetProperty("rule_max_duration_ms").GetInt32());
+    }
+
+    [Fact]
+    public void JobResponse_deserializes_agent_settings_and_derives_the_kind_predicates()
+    {
+        const string payload = """
+        {
+          "id": "0192a4e0-0000-7000-8000-000000000002",
+          "account_id": "0192a4e0-0000-7000-8000-0000000000aa",
+          "kind": "agent",
+          "name": "Nightly ticket triage",
+          "status": "unverified",
+          "schedule_kind": "cron",
+          "cron_expression": "0 3 * * *",
+          "timezone": "Europe/Berlin",
+          "grace_seconds": 600,
+          "stuck_run_detection": true,
+          "max_run_duration_seconds": 1800,
+          "misfire_policy": "do_nothing",
+          "report_required": true,
+          "items_label": "tickets",
+          "rule_empty_result_enabled": true,
+          "rule_max_cost_usd_per_run": 0.5,
+          "rule_max_cost_usd_per_period": 20,
+          "rule_cost_period": "month",
+          "rule_max_steps": 40,
+          "rule_max_tool_calls": 100,
+          "rule_max_duration_ms": 900000
+        }
+        """;
+
+        var job = JsonSerializer.Deserialize<JobResponse>(payload, SteadyCronJson.Options);
+
+        Assert.NotNull(job);
+        Assert.True(job!.IsAgent);
+        Assert.True(job.IsPingDriven);
+        Assert.Equal("tickets", job.ItemsLabel);
+        Assert.True(job.ReportRequired);
+        Assert.True(job.RuleEmptyResultEnabled);
+        Assert.Equal(0.5m, job.RuleMaxCostUsdPerRun);
+        Assert.Equal("month", job.RuleCostPeriod);
+        Assert.Equal(900_000, job.RuleMaxDurationMs);
+    }
+
+    [Fact]
+    public void JobResponse_kind_predicates_never_derive_one_from_the_other()
+    {
+        // The recurring bug docs/AGENTS.md §12 documents: `!= "heartbeat"` used to mean "HTTP".
+        var agent = new JobResponse { Kind = "agent" };
+        var heartbeat = new JobResponse { Kind = "heartbeat" };
+        var http = new JobResponse { Kind = "http" };
+
+        Assert.True(agent.IsPingDriven);
+        Assert.True(heartbeat.IsPingDriven);
+        Assert.False(http.IsPingDriven);
+
+        Assert.True(JobKinds.IsHttp(http.Kind));
+        Assert.False(JobKinds.IsHttp(agent.Kind));
+        Assert.False(heartbeat.IsAgent);
+    }
+
+    [Fact]
+    public void UpdateJobRequest_omits_the_write_once_agent_flags()
+    {
+        // report_required / rule_empty_result_enabled are not on the PATCH surface at all
+        // (docs/AGENTS.md §8) — sending them would be silently ignored by the server.
+        var json = JsonSerializer.Serialize(
+            new UpdateJobRequest { ItemsLabel = "rows", RuleMaxCostUsdPerRun = 0m },
+            SteadyCronJson.Options);
+
+        Assert.Contains("\"items_label\":\"rows\"", json, StringComparison.Ordinal);
+        // 0 is the documented "clear this ceiling" sentinel, so it must survive serialization.
+        Assert.Contains("\"rule_max_cost_usd_per_run\":0", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("report_required", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("rule_empty_result_enabled", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AlertTrigger_serializes_the_agent_triggers_as_snake_case()
+    {
+        var json = JsonSerializer.Serialize(
+            new CreateAlertRuleRequest { ChannelId = Guid.Empty, Trigger = AlertTrigger.OnEmptyResult },
+            SteadyCronJson.Options);
+
+        Assert.Contains("\"trigger\":\"on_empty_result\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CronPreviewResponse_maps_next_fires()
     {
         const string payload = """

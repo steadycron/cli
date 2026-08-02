@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using SteadyCron.Cli.Api.Models;
 using SteadyCron.Cli.Configuration;
 using SteadyCron.Cli.Infrastructure;
 using SteadyCron.Cli.Manifest;
@@ -19,7 +20,7 @@ public sealed class JobCreateSettings : CliSettings
     public string? JobKey { get; set; }
 
     [CommandOption("--kind <KIND>")]
-    [Description("http (default) or heartbeat.")]
+    [Description("http (default), heartbeat, or agent.")]
     public string? Kind { get; set; }
 
     [CommandOption("--description <TEXT>")]
@@ -86,18 +87,55 @@ public sealed class JobCreateSettings : CliSettings
     [Description("http: do_nothing (default) or fire_once_now.")]
     public string? MisfirePolicy { get; set; }
 
-    // Heartbeat
+    // Heartbeat / agent
     [CommandOption("--grace <SECONDS>")]
-    [Description("heartbeat: grace period before a missed ping alerts.")]
+    [Description("heartbeat|agent: grace period before a missed ping alerts.")]
     public int? Grace { get; set; }
 
     [CommandOption("--no-stuck-run-detection")]
-    [Description("heartbeat: disable stuck-run detection (enabled by default).")]
+    [Description("heartbeat: disable stuck-run detection (enabled by default; agent monitors always have it on).")]
     public bool NoStuckRunDetection { get; set; }
 
     [CommandOption("--max-run-duration <SECONDS>")]
-    [Description("heartbeat: max in-flight run duration before a /start is abandoned.")]
+    [Description("heartbeat|agent: max in-flight run duration before a /start is abandoned.")]
     public int? MaxRunDuration { get; set; }
+
+    // Agent monitors. Cost ceilings are USD, the unit agents report and providers quote.
+    [CommandOption("--items-label <LABEL>")]
+    [Description("agent: what this agent produces, e.g. \"tickets\" (max 40 chars).")]
+    public string? ItemsLabel { get; set; }
+
+    [CommandOption("--no-report-required")]
+    [Description("agent: accept a success ping with no run report as a plain success (report required by default).")]
+    public bool NoReportRequired { get; set; }
+
+    [CommandOption("--allow-empty-result")]
+    [Description("agent: do not fail a run that reports zero items produced (it fails by default).")]
+    public bool AllowEmptyResult { get; set; }
+
+    [CommandOption("--max-cost-per-run <USD>")]
+    [Description("agent: alert when a single run costs more than this, in USD.")]
+    public decimal? MaxCostPerRun { get; set; }
+
+    [CommandOption("--max-cost-per-period <USD>")]
+    [Description("agent: alert when spend over --cost-period exceeds this, in USD.")]
+    public decimal? MaxCostPerPeriod { get; set; }
+
+    [CommandOption("--cost-period <PERIOD>")]
+    [Description("agent: day or month (default month) — the window --max-cost-per-period sums over.")]
+    public string? CostPeriod { get; set; }
+
+    [CommandOption("--max-steps <N>")]
+    [Description("agent: alert when a run's step count exceeds this (loop detection).")]
+    public int? MaxSteps { get; set; }
+
+    [CommandOption("--max-tool-calls <N>")]
+    [Description("agent: alert when a run's tool-call count exceeds this.")]
+    public int? MaxToolCalls { get; set; }
+
+    [CommandOption("--max-duration-ms <MS>")]
+    [Description("agent: alert when a run's measured duration exceeds this, in milliseconds.")]
+    public int? MaxDurationMs { get; set; }
 
     public override ValidationResult Validate() =>
         string.IsNullOrWhiteSpace(Name)
@@ -135,10 +173,10 @@ public sealed class JobCreateCommand : SteadyCronCommandBase<JobCreateSettings>
             return ExitCodes.Ok;
         }
 
-        output.Success($"Created {job.Kind} job '{job.Name}' ({job.Id}).");
+        output.Success($"Created {JobKinds.Label(job.Kind)} '{job.Name}' ({job.Id}).");
         if (job.PingUrls is { } ping)
         {
-            JobFormatting.RenderPingSnippet(output, ping, job.CronExpression);
+            JobFormatting.RenderPingSnippet(output, ping, job.CronExpression, job.Kind);
         }
 
         if (job.PausedReason == JobFormatting.UnverifiedEmailPauseReason)
@@ -172,7 +210,16 @@ public sealed class JobCreateCommand : SteadyCronCommandBase<JobCreateSettings>
             MisfirePolicy = s.MisfirePolicy,
             Grace = s.Grace,
             StuckRunDetection = s.NoStuckRunDetection ? false : null,
-            MaxRunDuration = s.MaxRunDuration,
+            MaxRunDurationSeconds = s.MaxRunDuration,
+            ItemsLabel = s.ItemsLabel,
+            ReportRequired = s.NoReportRequired ? false : null,
+            RuleEmptyResultEnabled = s.AllowEmptyResult ? false : null,
+            RuleMaxCostUsdPerRun = s.MaxCostPerRun,
+            RuleMaxCostUsdPerPeriod = s.MaxCostPerPeriod,
+            RuleCostPeriod = s.CostPeriod,
+            RuleMaxSteps = s.MaxSteps,
+            RuleMaxToolCalls = s.MaxToolCalls,
+            RuleMaxDurationMs = s.MaxDurationMs,
         };
 
         if (s.Headers.Length > 0)

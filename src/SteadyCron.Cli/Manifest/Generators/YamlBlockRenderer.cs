@@ -40,6 +40,24 @@ public sealed class YamlBlockRenderer : IManifestBlockRenderer
             sb.Append("    #   - channel: ops-email       # channel name — see `manifest add channel`\n");
             sb.Append("    #     trigger: on_failure\n");
         }
+        else if (spec.IsAgent)
+        {
+            // The two clocks an agent monitor runs on are separate, so both are worth spelling out
+            // in the inserted block rather than leaving one to a default (docs/AGENTS.md §2.2).
+            sb.Append("    grace: ").Append(spec.Grace)
+                .Append("               # no /start ping by then → the schedule window is missed\n");
+            sb.Append("    max_run_duration_seconds: 1800   # a /start with no completion by then → abandoned\n");
+            sb.Append("    items_label: ").Append(spec.ItemsLabel)
+                .Append("       # names itemsProduced in alerts; a run producing 0 fails\n");
+            sb.Append("    # rule_max_cost_usd_per_run: 0.50\n");
+            sb.Append("    # rule_max_cost_usd_per_period: 20\n");
+            sb.Append("    # rule_cost_period: month     # day | month\n");
+            sb.Append("    # rule_max_steps: 40          # loop detection\n");
+            sb.Append("    # rule_max_tool_calls: 100\n");
+            sb.Append("    # rules:\n");
+            sb.Append("    #   - channel: ops-email       # channel name — see `manifest add channel`\n");
+            sb.Append("    #     trigger: on_empty_result\n");
+        }
         else
         {
             sb.Append("    grace: ").Append(spec.Grace)

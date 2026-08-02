@@ -6,7 +6,7 @@ namespace SteadyCron.Cli.Manifest.Generators;
 /// </summary>
 public sealed record NewJobSpec
 {
-    /// <summary><c>http</c> or <c>heartbeat</c>.</summary>
+    /// <summary><c>http</c>, <c>heartbeat</c>, or <c>agent</c>.</summary>
     public required string Kind { get; init; }
 
     public required string Name { get; init; }
@@ -22,7 +22,7 @@ public sealed record NewJobSpec
 
     public required string Timezone { get; init; }
 
-    /// <summary>Heartbeat only.</summary>
+    /// <summary>Heartbeat and agent monitors.</summary>
     public int? Grace { get; init; }
 
     /// <summary>HTTP only.</summary>
@@ -31,7 +31,15 @@ public sealed record NewJobSpec
     /// <summary>HTTP only.</summary>
     public string? Method { get; init; }
 
-    public bool IsHttp => string.Equals(Kind, "http", StringComparison.Ordinal);
+    /// <summary>
+    /// Agent only — what the agent produces ("tickets", "rows"). Prompted for at creation time
+    /// deliberately: it forces the author to decide what proves a run did its job.
+    /// </summary>
+    public string? ItemsLabel { get; init; }
+
+    public bool IsHttp => Api.Models.JobKinds.IsHttp(Kind);
+
+    public bool IsAgent => Api.Models.JobKinds.IsAgent(Kind);
 }
 
 /// <summary>Result of collecting flags/prompts for <c>manifest add channel</c>.</summary>

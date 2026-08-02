@@ -1,3 +1,5 @@
+using SteadyCron.Cli.Api.Models;
+
 namespace SteadyCron.Cli.Manifest;
 
 /// <summary>
@@ -10,6 +12,13 @@ namespace SteadyCron.Cli.Manifest;
 public static class ManifestSchema
 {
     public static readonly IReadOnlyList<string> HttpMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+    /// <summary>The job kinds a manifest may declare. Delegates to the wire contract so the
+    /// manifest and the API client can never disagree about what a kind is called.</summary>
+    public static readonly IReadOnlyList<string> JobKinds = Api.Models.JobKinds.All;
+
+    /// <summary>The window an agent's per-period spend ceiling sums over.</summary>
+    public static readonly IReadOnlyList<string> AgentCostPeriods = ["day", "month"];
 
     public static readonly IReadOnlyList<string> ChannelKinds = ["email", "slack", "discord", "webhook", "telegram"];
 

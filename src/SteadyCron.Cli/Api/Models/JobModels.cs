@@ -34,9 +34,21 @@ public sealed record CreateJobRequest
     public bool? SkipIfRunning { get; init; }
     public MisfirePolicy? MisfirePolicy { get; init; }
 
-    // Heartbeat
+    // Heartbeat / agent (both ping-driven)
     public bool? StuckRunDetection { get; init; }
     public int? MaxRunDurationSeconds { get; init; }
+
+    // Agent monitor settings (kind = "agent" only — the API rejects them on other kinds).
+    // Cost ceilings are USD on the wire and micro-USD in the database.
+    public bool? ReportRequired { get; init; }
+    public string? ItemsLabel { get; init; }
+    public bool? RuleEmptyResultEnabled { get; init; }
+    public decimal? RuleMaxCostUsdPerRun { get; init; }
+    public decimal? RuleMaxCostUsdPerPeriod { get; init; }
+    public AgentCostPeriod? RuleCostPeriod { get; init; }
+    public int? RuleMaxSteps { get; init; }
+    public int? RuleMaxToolCalls { get; init; }
+    public int? RuleMaxDurationMs { get; init; }
 
     public ExecutionStatus? Status { get; init; }
     public string? JobKey { get; init; }
@@ -70,9 +82,21 @@ public sealed record UpdateJobRequest
     public bool? SkipIfRunning { get; init; }
     public MisfirePolicy? MisfirePolicy { get; init; }
     public string? JobKey { get; init; }
+
+    // Agent monitor settings, applied only when the job is an agent monitor. A numeric ceiling
+    // follows the same sentinel convention as HTTP MaxDurationMs: omitted = unchanged, 0 = clear.
+    // ReportRequired and RuleEmptyResultEnabled are deliberately absent — the API does not accept
+    // them on PATCH (docs/AGENTS.md §8); `steadycron apply` changes them via reconcile instead.
+    public string? ItemsLabel { get; init; }
+    public decimal? RuleMaxCostUsdPerRun { get; init; }
+    public decimal? RuleMaxCostUsdPerPeriod { get; init; }
+    public AgentCostPeriod? RuleCostPeriod { get; init; }
+    public int? RuleMaxSteps { get; init; }
+    public int? RuleMaxToolCalls { get; init; }
+    public int? RuleMaxDurationMs { get; init; }
 }
 
-/// <summary>The three ping URLs returned for heartbeat jobs.</summary>
+/// <summary>The three ping URLs returned for ping-driven jobs (heartbeat and agent monitors).</summary>
 public sealed record PingUrls(string Success, string Start, string Fail);
 
 public sealed record JobTagInfo(Guid Id, string Key, string Value, string? Color);
@@ -117,6 +141,22 @@ public sealed record JobResponse
     public string? SigningSecret { get; init; }
     public string? PausedReason { get; init; }
     public string? JobKey { get; init; }
+
+    // Agent monitor settings — emitted by the API only for agent monitors, null on other kinds.
+    public bool? ReportRequired { get; init; }
+    public string? ItemsLabel { get; init; }
+    public bool? RuleEmptyResultEnabled { get; init; }
+    public decimal? RuleMaxCostUsdPerRun { get; init; }
+    public decimal? RuleMaxCostUsdPerPeriod { get; init; }
+    public string? RuleCostPeriod { get; init; }
+    public int? RuleMaxSteps { get; init; }
+    public int? RuleMaxToolCalls { get; init; }
+    public int? RuleMaxDurationMs { get; init; }
+
+    /// <summary>True for the two ping-driven kinds. Never derive this from <c>!= "http"</c>.</summary>
+    public bool IsPingDriven => JobKinds.IsPingDriven(Kind);
+
+    public bool IsAgent => JobKinds.IsAgent(Kind);
 }
 
 public sealed record JobListResponse(

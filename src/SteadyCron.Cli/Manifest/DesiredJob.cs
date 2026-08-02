@@ -11,7 +11,7 @@ public sealed record DesiredJob
 {
     public required string Name { get; init; }
 
-    /// <summary><c>http</c> or <c>heartbeat</c>.</summary>
+    /// <summary><c>http</c>, <c>heartbeat</c>, or <c>agent</c>.</summary>
     public required string Kind { get; init; }
 
     /// <summary>Stable unique key for this job; maps to <c>job_key</c> on the API. Null = auto-generated from name.</summary>
@@ -52,14 +52,30 @@ public sealed record DesiredJob
     public bool SkipIfRunning { get; init; }
     public string MisfirePolicyValue { get; init; } = JobDefaults.MisfirePolicy;
 
-    // ── Heartbeat ────────────────────────────────────────────────────────────────
+    // ── Heartbeat and agent (both ping-driven) ───────────────────────────────────
     public int GraceSeconds { get; init; } = JobDefaults.GraceSeconds;
     public bool StuckRunDetection { get; init; } = JobDefaults.StuckRunDetection;
 
     /// <summary>Only managed (created/diffed) when explicitly set; otherwise the server computes it.</summary>
     public int? MaxRunDurationSeconds { get; init; }
 
-    public bool IsHttp => string.Equals(Kind, "http", StringComparison.Ordinal);
+    // ── Agent monitors ───────────────────────────────────────────────────────────
+    // Null means "not declared" and is left to the server on create / left alone on update, so a
+    // manifest that says nothing about cost never clears a ceiling set elsewhere.
+
+    public bool ReportRequired { get; init; } = JobDefaults.ReportRequired;
+    public string? ItemsLabel { get; init; }
+    public bool RuleEmptyResultEnabled { get; init; } = JobDefaults.RuleEmptyResultEnabled;
+    public decimal? RuleMaxCostUsdPerRun { get; init; }
+    public decimal? RuleMaxCostUsdPerPeriod { get; init; }
+    public AgentCostPeriod? RuleCostPeriod { get; init; }
+    public int? RuleMaxSteps { get; init; }
+    public int? RuleMaxToolCalls { get; init; }
+    public int? RuleMaxDurationMs { get; init; }
+
+    public bool IsHttp => JobKinds.IsHttp(Kind);
+
+    public bool IsAgent => JobKinds.IsAgent(Kind);
 }
 
 /// <summary>API-matching defaults applied to omitted manifest fields (see JobsController).</summary>
@@ -74,6 +90,17 @@ public static class JobDefaults
     public const string MisfirePolicy = "do_nothing";
     public const int GraceSeconds = 60;
     public const bool StuckRunDetection = true;
+
+    // Agent monitors: both default on. Together they are the point of the kind — a bare exit-0 is
+    // not proof of work, and a run that produced nothing is a failure.
+    public const bool ReportRequired = true;
+    public const bool RuleEmptyResultEnabled = true;
+
+    /// <summary>The window a per-period spend ceiling sums over when the manifest names no other.</summary>
+    public const string AgentCostPeriod = "month";
+
+    /// <summary>Longest <c>items_label</c> the API accepts.</summary>
+    public const int ItemsLabelMaxLength = 40;
 }
 
 /// <summary>A single field that differs between desired and server state, for plan display.</summary>

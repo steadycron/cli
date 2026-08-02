@@ -226,6 +226,41 @@ public sealed class ManifestLoaderV2Tests
         Assert.Throws<ManifestException>(() => _loader.LoadFromPaths([dir]));
     }
 
+    // ── legacy field spellings ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_folds_the_legacy_max_run_duration_onto_the_wire_name()
+    {
+        // The API only knows `max_run_duration_seconds`; a manifest written against the old CLI
+        // spelling must still reach it, or the field is silently dropped on apply.
+        var manifest = _loader.Parse("""
+        jobs:
+          - name: nightly-backup
+            kind: heartbeat
+            interval: 3600
+            max_run_duration: 1200
+        """);
+
+        var job = Assert.Single(manifest.Jobs!);
+        Assert.Equal(1200, job.MaxRunDurationSeconds);
+        Assert.Null(job.MaxRunDuration);
+    }
+
+    [Fact]
+    public void Parse_prefers_the_canonical_name_when_both_are_present()
+    {
+        var manifest = _loader.Parse("""
+        jobs:
+          - name: nightly-backup
+            kind: heartbeat
+            interval: 3600
+            max_run_duration: 1200
+            max_run_duration_seconds: 1800
+        """);
+
+        Assert.Equal(1800, Assert.Single(manifest.Jobs!).MaxRunDurationSeconds);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────
 
     private static string CreateTempDir()

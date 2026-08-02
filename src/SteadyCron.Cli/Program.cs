@@ -135,6 +135,7 @@ app.Configure(config =>
             add.AddCommand<AddJobCommand>("job")
                 .WithDescription("Append a job to the manifest.")
                 .WithExample("manifest", "add", "job", "--kind", "heartbeat", "--name", "nightly-backup")
+                .WithExample("manifest", "add", "job", "--kind", "agent", "--name", "nightly-triage", "--items-label", "tickets")
                 .WithExample("manifest", "add", "job", "--kind", "http", "--name", "daily-report", "--url", "https://api.example.com/jobs/daily-report");
             add.AddCommand<AddChannelCommand>("channel")
                 .WithDescription("Append an alert channel to the manifest.")
@@ -156,11 +157,11 @@ app.Configure(config =>
         jobs.AddCommand<JobCreateCommand>("create").WithDescription("Create a single job from flags.");
         jobs.AddCommand<JobLogsCommand>("logs").WithDescription("Show recent executions of an HTTP job.");
         jobs.AddCommand<JobPingUrlsCommand>("ping-urls")
-            .WithDescription("Show ping URLs for heartbeat monitors (omit job to list all).")
+            .WithDescription("Show ping URLs for heartbeat and agent monitors (omit job to list all).")
             .WithExample("jobs", "ping-urls")
             .WithExample("jobs", "ping-urls", "nightly-backup");
         jobs.AddCommand<JobSnippetCommand>("snippet")
-            .WithDescription("Generate integration code that wires a heartbeat monitor into a script or workflow.")
+            .WithDescription("Generate integration code that wires a heartbeat or agent monitor into a script or workflow.")
             .WithExample("jobs", "snippet", "nightly-backup")
             .WithExample("jobs", "snippet", "nightly-backup", "--lang", "python")
             .WithExample("jobs", "snippet", "nightly-backup", "--lang", "github-actions");

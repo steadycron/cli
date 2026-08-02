@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using SteadyCron.Cli.Api.Models;
 
 namespace SteadyCron.Cli.Manifest;
 
@@ -64,10 +65,10 @@ public sealed class ManifestValidator
                 errors.Add($"{label}: duplicate job name '{job.Name}'. Names must be unique.");
             }
 
-            var kind = job.Kind?.Trim().ToLowerInvariant() ?? "http";
-            if (kind != "http" && kind != "heartbeat")
+            var kind = job.Kind?.Trim().ToLowerInvariant() ?? JobKinds.Http;
+            if (!ManifestSchema.JobKinds.Contains(kind))
             {
-                errors.Add($"{label}: 'kind' must be 'http' or 'heartbeat' (got '{job.Kind}').");
+                errors.Add($"{label}: 'kind' must be one of {string.Join(", ", ManifestSchema.JobKinds)} (got '{job.Kind}').");
                 continue;
             }
 
@@ -91,13 +92,26 @@ public sealed class ManifestValidator
                 errors.Add($"{label}: 'interval' must be between 10 and 86400 seconds (got {job.Interval}).");
             }
 
-            if (kind == "http")
+            if (JobKinds.IsHttp(kind))
             {
                 ValidateHttpJob(job, label, errors);
             }
             else
             {
-                ValidateHeartbeatJob(job, label, errors);
+                ValidatePingDrivenJob(job, label, errors);
+            }
+
+            if (JobKinds.IsAgent(kind))
+            {
+                ValidateAgentJob(job, label, errors);
+            }
+            else
+            {
+                var agentFields = JobMapper.AgentFieldNames(job);
+                if (agentFields.Count > 0)
+                {
+                    errors.Add($"{label}: field(s) only valid for agent monitors: {string.Join(", ", agentFields)}.");
+                }
             }
 
             // v2 tag references — only checked when tags are declared in this manifest
@@ -182,23 +196,23 @@ public sealed class ManifestValidator
         var offenders = new List<string>();
         if (job.Grace is not null) { offenders.Add("grace"); }
         if (job.StuckRunDetection is not null) { offenders.Add("stuck_run_detection"); }
-        if (job.MaxRunDuration is not null) { offenders.Add("max_run_duration"); }
+        if (job.MaxRunDurationSeconds is not null) { offenders.Add("max_run_duration_seconds"); }
         if (offenders.Count > 0)
         {
             errors.Add($"{label}: field(s) not valid for HTTP jobs: {string.Join(", ", offenders)}.");
         }
     }
 
-    private static void ValidateHeartbeatJob(ManifestJob job, string label, List<string> errors)
+    private static void ValidatePingDrivenJob(ManifestJob job, string label, List<string> errors)
     {
         if (job.Grace.HasValue && job.Grace.Value is < 0 or > 86_400)
         {
             errors.Add($"{label}: 'grace' must be between 0 and 86400 seconds.");
         }
 
-        if (job.MaxRunDuration.HasValue && job.MaxRunDuration.Value is < 60 or > 86_400)
+        if (job.MaxRunDurationSeconds.HasValue && job.MaxRunDurationSeconds.Value is < 60 or > 86_400)
         {
-            errors.Add($"{label}: 'max_run_duration' must be between 60 and 86400 seconds.");
+            errors.Add($"{label}: 'max_run_duration_seconds' must be between 60 and 86400 seconds.");
         }
 
         var offenders = new List<string>();
@@ -215,7 +229,64 @@ public sealed class ManifestValidator
         if (job.MisfirePolicy is not null) { offenders.Add("misfire_policy"); }
         if (offenders.Count > 0)
         {
-            errors.Add($"{label}: field(s) not valid for heartbeat jobs: {string.Join(", ", offenders)}.");
+            errors.Add($"{label}: field(s) not valid for ping-driven jobs: {string.Join(", ", offenders)}.");
+        }
+    }
+
+    /// <summary>
+    /// Agent-only checks. Bounds mirror the API's <c>ck_jobs_agent_rule_bounds</c> so a manifest
+    /// fails here, naming the field, rather than as a 400 halfway through an apply.
+    /// </summary>
+    private static void ValidateAgentJob(ManifestJob job, string label, List<string> errors)
+    {
+        if (job.StuckRunDetection is false)
+        {
+            errors.Add(
+                $"{label}: 'stuck_run_detection' cannot be disabled on an agent monitor — " +
+                "enforcing the /start ping is what the kind is for.");
+        }
+
+        if (job.ItemsLabel is { Length: > JobDefaults.ItemsLabelMaxLength })
+        {
+            errors.Add($"{label}: 'items_label' must be {JobDefaults.ItemsLabelMaxLength} characters or fewer.");
+        }
+
+        if (job.RuleMaxCostUsdPerRun < 0)
+        {
+            errors.Add($"{label}: 'rule_max_cost_usd_per_run' cannot be negative (0 or omitted means no ceiling).");
+        }
+
+        if (job.RuleMaxCostUsdPerPeriod < 0)
+        {
+            errors.Add($"{label}: 'rule_max_cost_usd_per_period' cannot be negative (0 or omitted means no ceiling).");
+        }
+
+        foreach (var (field, value) in new[]
+                 {
+                     ("rule_max_steps", job.RuleMaxSteps),
+                     ("rule_max_tool_calls", job.RuleMaxToolCalls),
+                     ("rule_max_duration_ms", job.RuleMaxDurationMs),
+                 })
+        {
+            if (value < 0)
+            {
+                errors.Add($"{label}: '{field}' cannot be negative (0 or omitted means no ceiling).");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.RuleCostPeriod))
+        {
+            var period = job.RuleCostPeriod.Trim().ToLowerInvariant();
+            if (!ManifestSchema.AgentCostPeriods.Contains(period))
+            {
+                errors.Add(
+                    $"{label}: 'rule_cost_period' must be one of {string.Join(", ", ManifestSchema.AgentCostPeriods)} " +
+                    $"(got '{job.RuleCostPeriod}').");
+            }
+            else if (job.RuleMaxCostUsdPerPeriod is null or 0)
+            {
+                errors.Add($"{label}: 'rule_cost_period' requires 'rule_max_cost_usd_per_period' to be set.");
+            }
         }
     }
 

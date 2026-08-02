@@ -9,6 +9,12 @@ internal static class LogbookFormatting
         {
             "executions" => ["execution_success", "execution_failure"],
             "heartbeats" => ["heartbeat_missed", "heartbeat_recovered", "run_abandoned", "ping_success", "ping_fail", "ping_start"],
+            // Agent runs are their own domain, read from run reports rather than pings — one run
+            // is one row, with the evaluated outcome rather than the ping's claim.
+            "agents" or "agentruns" => [
+                "agent_run_started", "agent_run_completed", "agent_run_failed", "agent_run_unverified",
+                "agent_run_missed", "agent_run_recovered", "agent_run_abandoned",
+            ],
             "alerts" => ["alert_delivered", "alert_failed", "alert_suppressed", "alert_pending"],
             "jobs" => ["job_created", "job_deleted", "job_paused", "job_resumed"],
             "keys" or "apikeys" => ["api_key_created", "api_key_revoked"],
@@ -57,6 +63,13 @@ internal static class LogbookFormatting
         ["ping_success"] = "Heartbeat ping received",
         ["ping_fail"] = "Heartbeat ping failed",
         ["ping_start"] = "Heartbeat run started",
+        ["agent_run_started"] = "Agent run started",
+        ["agent_run_completed"] = "Agent run completed",
+        ["agent_run_failed"] = "Agent run failed",
+        ["agent_run_unverified"] = "Agent run unverified",
+        ["agent_run_missed"] = "Agent run missed",
+        ["agent_run_recovered"] = "Agent run recovered",
+        ["agent_run_abandoned"] = "Agent run abandoned",
         ["alert_delivered"] = "Alert delivered",
         ["alert_failed"] = "Alert delivery failed",
         ["alert_suppressed"] = "Alert suppressed",

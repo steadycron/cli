@@ -83,5 +83,29 @@ jobs:
     interval: 3600
     grace: 300
     stuck_run_detection: true
-    max_run_duration: 1200
+    max_run_duration_seconds: 1200
     tags: ["env:prod"]
+
+  # ── Agent: a heartbeat that also judges what the run produced ───────────────────
+  # Each run posts a JSON report (/start then /success) and SteadyCron evaluates it,
+  # so an agent that exits 0 having done nothing is a failure, not a green check.
+  - id: nightly-ticket-triage
+    name: Nightly ticket triage
+    kind: agent
+    schedule: "0 3 * * *"
+    timezone: Europe/Berlin
+    grace: 600                   # no /start ping by 03:10 → schedule window missed
+    max_run_duration_seconds: 1800   # a /start with no completion by then → abandoned
+    items_label: tickets         # names itemsProduced; a run producing 0 fails
+    rule_max_cost_usd_per_run: 0.50
+    rule_max_cost_usd_per_period: 20
+    rule_cost_period: month      # day | month, bucketed in the job's own timezone
+    rule_max_steps: 40           # loop detection
+    rule_max_tool_calls: 100
+    tags: ["env:prod"]
+    rules:
+      - channel: slack-oncall
+        trigger: on_empty_result
+        severity: p1
+      - channel: slack-oncall
+        trigger: on_cost_exceeded

@@ -30,11 +30,23 @@ internal static class AlertParsing
             "recovery" or "recover" => AlertTrigger.OnRecovery,
             "slow_run" or "slow" => AlertTrigger.OnSlowRun,
             "size_anomaly" or "size" => AlertTrigger.OnSizeAnomaly,
+            "empty_result" or "empty" => AlertTrigger.OnEmptyResult,
+            "cost_exceeded" or "cost" => AlertTrigger.OnCostExceeded,
+            "no_progress" or "progress" => AlertTrigger.OnNoProgress,
+            "unverified_run" or "unverified" => AlertTrigger.OnUnverifiedRun,
             _ => throw new CliException(
-                $"Unknown trigger '{raw}'. Expected one of: failure, n_consecutive, missed_heartbeat, recovery, slow_run, size_anomaly.",
+                $"Unknown trigger '{raw}'. Expected one of: {TriggerList}.",
                 ExitCodes.Error),
         };
     }
+
+    /// <summary>
+    /// The trigger names accepted by <c>--trigger</c>, in the order the help text lists them.
+    /// Shared by the parser's error message and the option description so the two cannot drift.
+    /// </summary>
+    public const string TriggerList =
+        "failure, n_consecutive, missed_heartbeat, recovery, slow_run, size_anomaly, " +
+        "empty_result, cost_exceeded, no_progress, unverified_run";
 
     public static AlertSeverity ParseSeverity(string raw) => raw.Trim().ToLowerInvariant() switch
     {
@@ -115,7 +127,8 @@ public sealed class RuleAddSettings : CliSettings
     public string? Channel { get; set; }
 
     [CommandOption("--trigger <TRIGGER>")]
-    [Description("failure | n_consecutive | missed_heartbeat | recovery | slow_run | size_anomaly.")]
+    [Description("failure | n_consecutive | missed_heartbeat | recovery | slow_run | size_anomaly | "
+                 + "empty_result | cost_exceeded | no_progress | unverified_run (the last four are agent monitors).")]
     public string? Trigger { get; set; }
 
     [CommandOption("--severity <SEVERITY>")]

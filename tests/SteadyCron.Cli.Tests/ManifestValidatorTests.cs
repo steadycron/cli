@@ -182,7 +182,107 @@ public sealed class ManifestValidatorTests
         """;
 
         var result = Validate(yaml);
-        Assert.Contains(result.Errors, e => e.Contains("not valid for heartbeat jobs") && e.Contains("url"));
+        Assert.Contains(result.Errors, e => e.Contains("not valid for ping-driven jobs") && e.Contains("url"));
+    }
+
+    // ── Agent monitor validation ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Agent_job_with_full_outcome_rules_is_valid()
+    {
+        const string yaml = """
+        version: 2
+        jobs:
+          - id: nightly-triage
+            name: Nightly ticket triage
+            kind: agent
+            schedule: "0 3 * * *"
+            timezone: Europe/Berlin
+            grace: 600
+            max_run_duration_seconds: 1800
+            items_label: tickets
+            report_required: true
+            rule_empty_result_enabled: true
+            rule_max_cost_usd_per_run: 0.50
+            rule_max_cost_usd_per_period: 20
+            rule_cost_period: month
+            rule_max_steps: 40
+            rule_max_tool_calls: 100
+            rule_max_duration_ms: 900000
+        """;
+
+        Assert.True(Validate(yaml).IsValid);
+    }
+
+    [Fact]
+    public void Error_when_agent_fields_on_a_heartbeat_job()
+    {
+        const string yaml = """
+        jobs:
+          - name: x
+            kind: heartbeat
+            interval: 300
+            items_label: tickets
+        """;
+
+        var result = Validate(yaml);
+        Assert.Contains(result.Errors, e => e.Contains("only valid for agent monitors") && e.Contains("items_label"));
+    }
+
+    [Fact]
+    public void Error_when_agent_disables_stuck_run_detection()
+    {
+        const string yaml = """
+        jobs:
+          - name: x
+            kind: agent
+            interval: 300
+            stuck_run_detection: false
+        """;
+
+        Assert.Contains(Validate(yaml).Errors, e => e.Contains("stuck_run_detection"));
+    }
+
+    [Fact]
+    public void Error_when_cost_period_has_no_period_ceiling()
+    {
+        const string yaml = """
+        jobs:
+          - name: x
+            kind: agent
+            interval: 300
+            rule_cost_period: month
+        """;
+
+        Assert.Contains(Validate(yaml).Errors, e => e.Contains("rule_cost_period"));
+    }
+
+    [Fact]
+    public void Error_when_cost_period_is_not_day_or_month()
+    {
+        const string yaml = """
+        jobs:
+          - name: x
+            kind: agent
+            interval: 300
+            rule_max_cost_usd_per_period: 20
+            rule_cost_period: fortnight
+        """;
+
+        Assert.Contains(Validate(yaml).Errors, e => e.Contains("rule_cost_period") && e.Contains("day, month"));
+    }
+
+    [Fact]
+    public void Error_on_an_unknown_job_kind_lists_all_three()
+    {
+        const string yaml = """
+        jobs:
+          - name: x
+            kind: robot
+            interval: 300
+        """;
+
+        Assert.Contains(Validate(yaml).Errors, e => e.Contains("http, heartbeat, agent"));
     }
 
     // ── Cross-reference validation ─────────────────────────────────────────────────

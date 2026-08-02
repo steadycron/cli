@@ -40,9 +40,14 @@ public sealed class JobMapper
         var timezone = string.IsNullOrWhiteSpace(job.Timezone) ? JobDefaults.Timezone : job.Timezone.Trim();
         var paused = job.Paused ?? false;
 
-        if (kind == "heartbeat")
+        if (JobKinds.IsPingDriven(kind))
         {
+            var isAgent = JobKinds.IsAgent(kind);
             RejectHttpFields(job, label);
+            if (!isAgent)
+            {
+                RejectAgentFields(job, label);
+            }
 
             var grace = job.Grace ?? JobDefaults.GraceSeconds;
             if (grace is < 0 or > 86_400)
@@ -51,17 +56,17 @@ public sealed class JobMapper
             }
 
             int? maxRunDuration = null;
-            if (job.MaxRunDuration is { } mrd)
+            if (job.MaxRunDurationSeconds is { } mrd)
             {
                 if (mrd is < 60 or > 86_400)
                 {
-                    throw new ManifestException($"{label}: 'max_run_duration' must be between 60 and 86400 seconds.");
+                    throw new ManifestException($"{label}: 'max_run_duration_seconds' must be between 60 and 86400 seconds.");
                 }
 
                 maxRunDuration = mrd;
             }
 
-            return new DesiredJob
+            var desired = new DesiredJob
             {
                 Name = name,
                 Kind = kind,
@@ -75,10 +80,16 @@ public sealed class JobMapper
                 Timezone = timezone,
                 Paused = paused,
                 GraceSeconds = grace,
-                StuckRunDetection = job.StuckRunDetection ?? JobDefaults.StuckRunDetection,
+                // Agent monitors force stuck-run detection on: enforcing /start is what the kind is
+                // for, and the API rejects an attempt to turn it off.
+                StuckRunDetection = isAgent || (job.StuckRunDetection ?? JobDefaults.StuckRunDetection),
                 MaxRunDurationSeconds = maxRunDuration,
             };
+
+            return isAgent ? WithAgentSettings(desired, job, label) : desired;
         }
+
+        RejectAgentFields(job, label);
 
         // HTTP job
         if (string.IsNullOrWhiteSpace(job.Url))
@@ -144,10 +155,10 @@ public sealed class JobMapper
 
         if (!d.IsHttp)
         {
-            return new CreateJobRequest
+            var request = new CreateJobRequest
             {
                 Name = d.Name,
-                Kind = "heartbeat",
+                Kind = d.Kind,
                 JobKey = d.JobKey,
                 Description = d.Description,
                 RunbookNotes = d.RunbookNotes,
@@ -157,16 +168,33 @@ public sealed class JobMapper
                 IntervalSeconds = d.IntervalSeconds,
                 Timezone = d.Timezone,
                 GraceSeconds = d.GraceSeconds,
-                StuckRunDetection = d.StuckRunDetection,
+                // The API forces this true for agents and rejects agent settings on a heartbeat,
+                // so only send what the kind actually accepts.
+                StuckRunDetection = d.IsAgent ? null : d.StuckRunDetection,
                 MaxRunDurationSeconds = d.MaxRunDurationSeconds,
                 Status = status,
             };
+
+            return d.IsAgent
+                ? request with
+                {
+                    ReportRequired = d.ReportRequired,
+                    ItemsLabel = d.ItemsLabel,
+                    RuleEmptyResultEnabled = d.RuleEmptyResultEnabled,
+                    RuleMaxCostUsdPerRun = d.RuleMaxCostUsdPerRun,
+                    RuleMaxCostUsdPerPeriod = d.RuleMaxCostUsdPerPeriod,
+                    RuleCostPeriod = d.RuleCostPeriod,
+                    RuleMaxSteps = d.RuleMaxSteps,
+                    RuleMaxToolCalls = d.RuleMaxToolCalls,
+                    RuleMaxDurationMs = d.RuleMaxDurationMs,
+                }
+                : request;
         }
 
         return new CreateJobRequest
         {
             Name = d.Name,
-            Kind = "http",
+            Kind = JobKinds.Http,
             JobKey = d.JobKey,
             Description = d.Description,
             RunbookNotes = d.RunbookNotes,
@@ -262,7 +290,11 @@ public sealed class JobMapper
         }
         else
         {
-            DiffHeartbeat(d, server, changes, builder);
+            DiffPingDriven(d, server, changes, builder);
+            if (d.IsAgent)
+            {
+                DiffAgent(d, server, changes, builder);
+            }
         }
 
         return new UpdateResult(changes.Count > 0, builder.Build(), changes);
@@ -361,7 +393,7 @@ public sealed class JobMapper
         }
     }
 
-    private static void DiffHeartbeat(DesiredJob d, JobResponse server, List<FieldChange> changes, UpdateBuilder b)
+    private static void DiffPingDriven(DesiredJob d, JobResponse server, List<FieldChange> changes, UpdateBuilder b)
     {
         if (server.GraceSeconds != d.GraceSeconds)
         {
@@ -369,7 +401,9 @@ public sealed class JobMapper
             changes.Add(new FieldChange("grace", server.GraceSeconds.ToString(CultureInfo.InvariantCulture), d.GraceSeconds.ToString(CultureInfo.InvariantCulture)));
         }
 
-        if (server.StuckRunDetection != d.StuckRunDetection)
+        // Agents force it on and the API ignores the field for them — diffing it would report a
+        // change that can never be applied.
+        if (!d.IsAgent && server.StuckRunDetection != d.StuckRunDetection)
         {
             b.StuckRunDetection = d.StuckRunDetection;
             changes.Add(new FieldChange("stuck_run_detection", server.StuckRunDetection.ToString(), d.StuckRunDetection.ToString()));
@@ -379,25 +413,180 @@ public sealed class JobMapper
         if (d.MaxRunDurationSeconds is { } desiredMrd && server.MaxRunDurationSeconds != desiredMrd)
         {
             b.MaxRunDurationSeconds = desiredMrd;
-            changes.Add(new FieldChange("max_run_duration", server.MaxRunDurationSeconds.ToString(CultureInfo.InvariantCulture), desiredMrd.ToString(CultureInfo.InvariantCulture)));
+            changes.Add(new FieldChange("max_run_duration_seconds", server.MaxRunDurationSeconds.ToString(CultureInfo.InvariantCulture), desiredMrd.ToString(CultureInfo.InvariantCulture)));
         }
     }
 
+    /// <summary>
+    /// Diffs the agent outcome rules. A cleared ceiling is sent as <c>0</c> — the API's documented
+    /// sentinel, since a PATCH cannot distinguish an omitted field from an explicit null.
+    /// <para><c>report_required</c> and <c>rule_empty_result_enabled</c> are absent: PATCH does not
+    /// accept them (docs/AGENTS.md §8). A divergence is surfaced as a change the user can see so it
+    /// is not silently ignored, and <c>steadycron apply</c> reconciles it server-side.</para>
+    /// </summary>
+    private static void DiffAgent(DesiredJob d, JobResponse server, List<FieldChange> changes, UpdateBuilder b)
+    {
+        if (!StringEquals(Empty(server.ItemsLabel), d.ItemsLabel))
+        {
+            b.ItemsLabel = d.ItemsLabel ?? string.Empty; // "" clears it server-side
+            changes.Add(new FieldChange("items_label", Display(server.ItemsLabel), Display(d.ItemsLabel)));
+        }
+
+        DiffCeiling("rule_max_cost_usd_per_run", server.RuleMaxCostUsdPerRun, d.RuleMaxCostUsdPerRun,
+            v => b.RuleMaxCostUsdPerRun = v, changes);
+        DiffCeiling("rule_max_cost_usd_per_period", server.RuleMaxCostUsdPerPeriod, d.RuleMaxCostUsdPerPeriod,
+            v => b.RuleMaxCostUsdPerPeriod = v, changes);
+
+        // The period only travels with a ceiling that is staying set; clearing the ceiling clears it.
+        var desiredPeriod = d.RuleMaxCostUsdPerPeriod is null ? null : d.RuleCostPeriod;
+        var serverPeriod = NormalizeCostPeriodOrNull(server.RuleCostPeriod);
+        if (desiredPeriod != serverPeriod && desiredPeriod is { } period)
+        {
+            b.RuleCostPeriod = period;
+            changes.Add(new FieldChange("rule_cost_period",
+                Display(serverPeriod?.ToString().ToLowerInvariant()), period.ToString().ToLowerInvariant()));
+        }
+
+        DiffCeiling("rule_max_steps", server.RuleMaxSteps, d.RuleMaxSteps, v => b.RuleMaxSteps = v, changes);
+        DiffCeiling("rule_max_tool_calls", server.RuleMaxToolCalls, d.RuleMaxToolCalls, v => b.RuleMaxToolCalls = v, changes);
+        DiffCeiling("rule_max_duration_ms", server.RuleMaxDurationMs, d.RuleMaxDurationMs, v => b.RuleMaxDurationMs = v, changes);
+
+        // Write-once on the PATCH surface — report the drift rather than pretending it applied.
+        if (server.ReportRequired is { } serverReportRequired && serverReportRequired != d.ReportRequired)
+        {
+            changes.Add(new FieldChange("report_required (apply only)", serverReportRequired.ToString(), d.ReportRequired.ToString()));
+        }
+
+        if (server.RuleEmptyResultEnabled is { } serverEmptyRule && serverEmptyRule != d.RuleEmptyResultEnabled)
+        {
+            changes.Add(new FieldChange("rule_empty_result_enabled (apply only)", serverEmptyRule.ToString(), d.RuleEmptyResultEnabled.ToString()));
+        }
+    }
+
+    private static void DiffCeiling(
+        string field, decimal? serverValue, decimal? desiredValue, Action<decimal?> set, List<FieldChange> changes)
+    {
+        if (serverValue == desiredValue) { return; }
+
+        set(desiredValue ?? 0m); // 0 = clear
+        changes.Add(new FieldChange(field, DisplayCeiling(serverValue), DisplayCeiling(desiredValue)));
+    }
+
+    private static void DiffCeiling(
+        string field, int? serverValue, int? desiredValue, Action<int?> set, List<FieldChange> changes)
+    {
+        if (serverValue == desiredValue) { return; }
+
+        set(desiredValue ?? 0); // 0 = clear
+        changes.Add(new FieldChange(field, DisplayCeiling(serverValue), DisplayCeiling(desiredValue)));
+    }
+
+    private static string DisplayCeiling<T>(T? value) where T : struct, IFormattable =>
+        value is null ? "(none)" : value.Value.ToString(null, CultureInfo.InvariantCulture);
+
+    private static AgentCostPeriod? NormalizeCostPeriodOrNull(string? value) =>
+        Enum.TryParse<AgentCostPeriod>(value, true, out var parsed) ? parsed : null;
+
     // ── validation / normalization helpers ────────────────────────────────────────
+
+    /// <summary>
+    /// Validates and folds the agent block onto an already-built <see cref="DesiredJob"/>. Bounds
+    /// mirror the API's own so a bad manifest fails locally with a field name rather than as a 400.
+    /// </summary>
+    private static DesiredJob WithAgentSettings(DesiredJob desired, ManifestJob job, string label)
+    {
+        if (job.StuckRunDetection is false)
+        {
+            throw new ManifestException(
+                $"{label}: 'stuck_run_detection' cannot be disabled on an agent monitor — " +
+                "enforcing the /start ping is what the kind is for.");
+        }
+
+        var itemsLabel = Empty(job.ItemsLabel);
+        if (itemsLabel is { Length: > JobDefaults.ItemsLabelMaxLength })
+        {
+            throw new ManifestException(
+                $"{label}: 'items_label' must be {JobDefaults.ItemsLabelMaxLength} characters or fewer.");
+        }
+
+        var costPerRun = NormalizeCeiling(job.RuleMaxCostUsdPerRun, "rule_max_cost_usd_per_run", label);
+        var costPerPeriod = NormalizeCeiling(job.RuleMaxCostUsdPerPeriod, "rule_max_cost_usd_per_period", label);
+        var costPeriod = NormalizeCostPeriod(job.RuleCostPeriod, label);
+
+        if (costPeriod is not null && costPerPeriod is null)
+        {
+            throw new ManifestException(
+                $"{label}: 'rule_cost_period' requires 'rule_max_cost_usd_per_period' to be set.");
+        }
+
+        return desired with
+        {
+            ReportRequired = job.ReportRequired ?? JobDefaults.ReportRequired,
+            ItemsLabel = itemsLabel,
+            RuleEmptyResultEnabled = job.RuleEmptyResultEnabled ?? JobDefaults.RuleEmptyResultEnabled,
+            RuleMaxCostUsdPerRun = costPerRun,
+            RuleMaxCostUsdPerPeriod = costPerPeriod,
+            // The period is meaningless without a ceiling, and the API defaults it to month; make
+            // that explicit so the plan output shows what will actually be stored.
+            RuleCostPeriod = costPerPeriod is null ? null : costPeriod ?? AgentCostPeriod.Month,
+            RuleMaxSteps = NormalizeCeiling(job.RuleMaxSteps, "rule_max_steps", label),
+            RuleMaxToolCalls = NormalizeCeiling(job.RuleMaxToolCalls, "rule_max_tool_calls", label),
+            RuleMaxDurationMs = NormalizeCeiling(job.RuleMaxDurationMs, "rule_max_duration_ms", label),
+        };
+    }
+
+    /// <summary>A ceiling is positive or absent; 0 is the documented "no ceiling" spelling.</summary>
+    private static decimal? NormalizeCeiling(decimal? value, string field, string label)
+    {
+        if (value is null or 0) { return null; }
+        if (value < 0)
+        {
+            throw new ManifestException($"{label}: '{field}' cannot be negative (0 or omitted means no ceiling).");
+        }
+
+        return value;
+    }
+
+    private static int? NormalizeCeiling(int? value, string field, string label)
+    {
+        if (value is null or 0) { return null; }
+        if (value < 0)
+        {
+            throw new ManifestException($"{label}: '{field}' cannot be negative (0 or omitted means no ceiling).");
+        }
+
+        return value;
+    }
+
+    private static AgentCostPeriod? NormalizeCostPeriod(string? value, string label)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return null; }
+
+        var v = value.Trim().ToLowerInvariant();
+        if (!ManifestSchema.AgentCostPeriods.Contains(v))
+        {
+            throw new ManifestException(
+                $"{label}: 'rule_cost_period' must be one of {string.Join(", ", ManifestSchema.AgentCostPeriods)} (got '{value}').");
+        }
+
+        return v == "day" ? AgentCostPeriod.Day : AgentCostPeriod.Month;
+    }
 
     private static string NormalizeKind(string? kind, string label)
     {
         if (string.IsNullOrWhiteSpace(kind))
         {
-            return "http";
+            return JobKinds.Http;
         }
 
         var k = kind.Trim().ToLowerInvariant();
-        return k switch
+        if (!ManifestSchema.JobKinds.Contains(k))
         {
-            "http" or "heartbeat" => k,
-            _ => throw new ManifestException($"{label}: 'kind' must be 'http' or 'heartbeat' (got '{kind}')."),
-        };
+            throw new ManifestException(
+                $"{label}: 'kind' must be one of {string.Join(", ", ManifestSchema.JobKinds)} (got '{kind}').");
+        }
+
+        return k;
     }
 
     private static string NormalizeMethod(string? method, string label)
@@ -498,8 +687,35 @@ public sealed class JobMapper
         if (offenders.Count > 0)
         {
             throw new ManifestException(
-                $"{label}: the following field(s) are not valid for heartbeat jobs: {string.Join(", ", offenders)}.");
+                $"{label}: the following field(s) are not valid for ping-driven jobs: {string.Join(", ", offenders)}.");
         }
+    }
+
+    /// <summary>Agent settings on any other kind are a mistake worth naming, not a field to ignore.</summary>
+    private static void RejectAgentFields(ManifestJob job, string label)
+    {
+        var offenders = AgentFieldNames(job);
+        if (offenders.Count > 0)
+        {
+            throw new ManifestException(
+                $"{label}: the following field(s) are only valid for agent monitors: {string.Join(", ", offenders)}.");
+        }
+    }
+
+    /// <summary>The agent-only fields this job declares, by their manifest names.</summary>
+    internal static List<string> AgentFieldNames(ManifestJob job)
+    {
+        var names = new List<string>();
+        if (job.ReportRequired is not null) { names.Add("report_required"); }
+        if (job.ItemsLabel is not null) { names.Add("items_label"); }
+        if (job.RuleEmptyResultEnabled is not null) { names.Add("rule_empty_result_enabled"); }
+        if (job.RuleMaxCostUsdPerRun is not null) { names.Add("rule_max_cost_usd_per_run"); }
+        if (job.RuleMaxCostUsdPerPeriod is not null) { names.Add("rule_max_cost_usd_per_period"); }
+        if (job.RuleCostPeriod is not null) { names.Add("rule_cost_period"); }
+        if (job.RuleMaxSteps is not null) { names.Add("rule_max_steps"); }
+        if (job.RuleMaxToolCalls is not null) { names.Add("rule_max_tool_calls"); }
+        if (job.RuleMaxDurationMs is not null) { names.Add("rule_max_duration_ms"); }
+        return names;
     }
 
     private static MisfirePolicy ParseMisfireEnum(string value) =>
@@ -586,6 +802,13 @@ public sealed class JobMapper
         public bool RetryOnStatusCodesSet { get; set; }
         public bool? SkipIfRunning { get; set; }
         public MisfirePolicy? MisfirePolicy { get; set; }
+        public string? ItemsLabel { get; set; }
+        public decimal? RuleMaxCostUsdPerRun { get; set; }
+        public decimal? RuleMaxCostUsdPerPeriod { get; set; }
+        public AgentCostPeriod? RuleCostPeriod { get; set; }
+        public int? RuleMaxSteps { get; set; }
+        public int? RuleMaxToolCalls { get; set; }
+        public int? RuleMaxDurationMs { get; set; }
 
         public UpdateJobRequest Build() => new()
         {
@@ -610,6 +833,13 @@ public sealed class JobMapper
             RetryOnStatusCodes = RetryOnStatusCodesSet ? RetryOnStatusCodes : null,
             SkipIfRunning = SkipIfRunning,
             MisfirePolicy = MisfirePolicy,
+            ItemsLabel = ItemsLabel,
+            RuleMaxCostUsdPerRun = RuleMaxCostUsdPerRun,
+            RuleMaxCostUsdPerPeriod = RuleMaxCostUsdPerPeriod,
+            RuleCostPeriod = RuleCostPeriod,
+            RuleMaxSteps = RuleMaxSteps,
+            RuleMaxToolCalls = RuleMaxToolCalls,
+            RuleMaxDurationMs = RuleMaxDurationMs,
         };
     }
 }

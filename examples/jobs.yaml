@@ -38,4 +38,4 @@ jobs:
     interval: 3600
     grace: 300
     stuck_run_detection: true
-    max_run_duration: 1200
+    max_run_duration_seconds: 1200
